@@ -120,7 +120,7 @@ public abstract class Evaluator {
 		}
 
 		// Remove unused species
-		// in what case is there unused species? mappedspecies is cleared each iteration
+		// in what case is there unused species? mapped species is cleared each iteration
 		Iterator<Species> iter = species.iterator();
 		while (iter.hasNext()) {
 			Species s = iter.next();

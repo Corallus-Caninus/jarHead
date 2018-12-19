@@ -73,7 +73,7 @@ public class ConnectionGene implements Serializable {
 		expressed = false;
 	}
 
-	public int getInnovation() { // terrible name. used as counter iterator (getter/setter)
+	public int getInnovation() { // bad name. used as counter iterator (getter/setter)
 		return innovation;
 	}
 

@@ -181,9 +181,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 			for (Genome g : genomes) {
 				for (ConnectionGene c : g.connections.values()) {
 					if ((c.getInNode() == node2.getId() || c.getInNode() == node1.getId())
-							&& (c.getOutNode() == node1.getId()) || c.getOutNode() == node2.getId()) { // grab a jacket
-																										// for chilly
-																										// conditions
+							&& (c.getOutNode() == node1.getId()) || c.getOutNode() == node2.getId()) { 
 						// connection exists globally. Add connection with respective innovation number
 						// but not impossible. make sure all connections are seen globally so we dont
 						// get generation 0 misalignment. HOW DO WE HANDLE DISABLED CONNECTIONS?
@@ -259,7 +257,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 			for (ConnectionGene c : g.connections.values()) {
 				if ((c.getInNode() == inToNew.getInNode() || c.getInNode() == newToOut.getInNode())
 						&& (c.getOutNode() == inToNew.getInNode()) || c.getOutNode() == newToOut.getOutNode()) {
-					// grab a jacket for chilly conditions. check in connection then out connection
+					// check in connection then out connection
 					// respectively
 					// connection exists globally. Add connection with respective innovation number
 					// but not impossible. make sure all connections are seen globally so we dont
@@ -545,7 +543,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 			ConnectionGene connection1 = genome1.getConnectionGenes().get(i);
 			ConnectionGene connection2 = genome2.getConnectionGenes().get(i);
 			if (connection1 != null && connection2 != null) {
-				// both genomes has the gene w/ this innovation number
+				// both genomes have the gene w/ this innovation number
 				matchingGenes++;
 				weightDifference += Math.abs(connection1.getWeight() - connection2.getWeight());
 			}
@@ -578,7 +576,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 	// anyways? hanging nodes only exist due to crossover of disabled genes
 	// (fundamental to NEAT algorithm per stanely)
 
-	// TODO: use DFS instead of back propagation to find FAS
+	// TODO: use DFS instead of backwards propagation to find FAS
 	/**
 	 * @deprecated
 	 * 

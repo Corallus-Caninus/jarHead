@@ -42,8 +42,7 @@ public class Network {
 
 	// consider sorting connections into rows for fast propagation or into sequence
 	// of connections for faster propagation (I want to pop one data structure and
-	// pop/push signals on one other structure to propagate). see JNEAT if this is
-	// cool. JNEAT is hella chilly breh. scrape it.
+	// pop/push signals on one other structure to propagate).
 
 	// CONSTRUCTOR
 	public Network(Genome genome) {
@@ -221,12 +220,12 @@ public class Network {
 																				// case?
 					nodeSignals.add(i, nodeSignals.remove(j));
 					connectionSignals.add(i, connectionSignals.remove(j));
-					i = 0; // do it work tho?
+					i = 0; // does this work.
 				}
 			}
 		}
 
-		// TODO: move acivation up a condition
+		// TODO: move activation up a condition
 		for (int i = 0; i < connectionSignals.size(); i++) { // final activation
 			connectionSignals.set(i, (float) (1f / (1f + Math.exp(-4.8f * connectionSignals.get(i))))); // move this up
 																										// a condition
