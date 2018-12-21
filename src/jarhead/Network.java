@@ -85,7 +85,7 @@ public class Network {
 
 	// TODO: organize into depth layers. matrix multiplication with minimum memory
 	// access > data structure manipulation throughput (think recursive solution on
-	// the stack time). use stream method to not alter data structure
+	// the stack time). use stream method to not alter data structure in run method.
 
 	// this may fix the above todo: for(;depth<maxDepth;++) as a finite solution.
 	// remember to give parallel access to data structures (synchronized hashmap--
@@ -145,7 +145,7 @@ public class Network {
 				if (val.equals(nodeSignals.get(m))) {
 					connectionSignals.set(n, connectionSignals.get(n) + connectionSignals.remove(m));
 					nodeSignals.remove(m);
-					n = 0;// was n--; TODO: wtf
+					n = 0;// TODO: fix initial condition so this can be k--
 				}
 			}
 		}
@@ -202,7 +202,7 @@ public class Network {
 						if (vals.equals(nodeSignals.get(m))) {
 							connectionSignals.set(k, connectionSignals.get(k) + connectionSignals.remove(m));
 							nodeSignals.remove(m);
-							k = 0; // was k--
+							k = 0; // TODO: fix initial condition so this can be k--
 						}
 					}
 				}

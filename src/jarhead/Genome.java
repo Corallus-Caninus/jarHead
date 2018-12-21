@@ -32,7 +32,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 	private static List<Integer> tmpList1 = new ArrayList<Integer>(); // buffer list
 	private static List<Integer> tmpList2 = new ArrayList<Integer>();
 
-	private final float PROBABILITY_PERTURBING = 0.9f; // rest is probability of assigning new weight
+	private final float PROBABILITY_PERTURBING = 0.9f; // should this be passed in to mutation method from evaluator?
 
 	// TODO: how are connection innovations globally iterated WRT counter class?
 	private Map<Integer, ConnectionGene> connections; // Integer map key is equivalent to connection innovation
@@ -125,6 +125,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 	public void addConnectionMutation(Random r, Counter innovation, int maxAttempts, List<Genome> genomes) {
 		int tries = 0;
 		boolean success = false;
+		// maxAttempts = maxConnections() //maxConnections operates on connections.
 
 		List<Integer> inConnections = new ArrayList<Integer>();
 		List<Integer> outConnections = new ArrayList<Integer>();
@@ -132,10 +133,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 		Integer[] nodeInnovationNumbers = new Integer[nodes.keySet().size()]; // this should be possible because
 		nodes.keySet().toArray(nodeInnovationNumbers); // only one mutation added each call to addConnectionMut
 
-		while (tries < maxAttempts && success == false) { // what is the purpose of maxAttmepts? bad solution to problem
-			tries++; // traverse the entire topology as well as tries. try to replace tries as
-						// condition. this might be solved since we have to check connections for
-						// feedback arcs
+		while (tries < maxAttempts && success == false) {
+			tries++;
 
 			Integer keyNode1 = nodeInnovationNumbers[r.nextInt(nodeInnovationNumbers.length)];
 			Integer keyNode2 = nodeInnovationNumbers[r.nextInt(nodeInnovationNumbers.length)];
@@ -181,7 +180,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 			for (Genome g : genomes) {
 				for (ConnectionGene c : g.connections.values()) {
 					if ((c.getInNode() == node2.getId() || c.getInNode() == node1.getId())
-							&& (c.getOutNode() == node1.getId()) || c.getOutNode() == node2.getId()) { 
+							&& (c.getOutNode() == node1.getId()) || c.getOutNode() == node2.getId()) {
 						// connection exists globally. Add connection with respective innovation number
 						// but not impossible. make sure all connections are seen globally so we dont
 						// get generation 0 misalignment. HOW DO WE HANDLE DISABLED CONNECTIONS?
@@ -189,7 +188,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 						newCon.enable(); // enable connection gene in case it was a disabled but existed globally
 						connections.put(newCon.getInnovation(), newCon);
 						if (FASTest(connections, nodes)) {
-							return; // TODO: need to perform FAStest. TEST HERE
+							return;
 						} else {
 							connections.remove(newCon.getInnovation());
 						}
@@ -209,14 +208,14 @@ public class Genome implements Serializable { // serializable allows classes to 
 			}
 
 			if (!FASTest(connections, nodes)) {
-				connections.remove(newCon.getInnovation()); // does this break innovation counter? dont mistake
+				connections.remove(newCon.getInnovation()); // does this break innovation counter? Don't mistake
 															// con.getInnovation for count.getInnovation
 				continue;
 			} else {
 				success = true;
 			}
 		}
-		if (success == false) { // this can be done better (what is going on here, TSP runaway issue?)?
+		if (success == false) {
 			System.out.println("Tried, but could not add more connections"); // TODO: make infinite condition to allow a
 																				// connection to be added and keep
 																				// mutation rate consistent across
@@ -243,7 +242,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 		NodeGene inNode = nodes.get(con.getInNode());
 		NodeGene outNode = nodes.get(con.getOutNode());
 
-		con.disable(); // this is the only time innovations are disabled. didn't stanely implement
+		con.disable(); // this is the only time innovations are disabled. didn't stanley implement
 						// chance to disable connection elsewhere?
 
 		NodeGene newNode = new NodeGene(TYPE.HIDDEN, nodeInnovation.getInnovation());
@@ -414,7 +413,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 			ConnectionGene connection1 = genome1.getConnectionGenes().get(i);
 			ConnectionGene connection2 = genome2.getConnectionGenes().get(i);
 			if (connection1 != null && connection2 != null) {
-				// both genomes has the gene w/ this innovation number
+				// both genomes have the gene w/ this innovation number
 				matchingGenes++;
 			}
 		}
@@ -576,7 +575,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 	// anyways? hanging nodes only exist due to crossover of disabled genes
 	// (fundamental to NEAT algorithm per stanely)
 
-	// TODO: use DFS instead of backwards propagation to find FAS
+	// TODO: use DFS instead of backwards propagation to find FAS. how can depth be
+	// assigned in this case?
 	/**
 	 * @deprecated
 	 * 
@@ -650,8 +650,9 @@ public class Genome implements Serializable { // serializable allows classes to 
 	 *         node is found.
 	 */
 
-	// TODO: if using this method of checking, might as well assign depth to nodes
-	// as well.
+	// TODO: if using this method of checking, we should assign depth to nodes
+	// as well. each connection mutation has a chance to change depth assignment.
+	// Does this make DFS search a sub-optimal solution?
 
 	public static boolean FASTest(Map<Integer, ConnectionGene> connections, Map<Integer, NodeGene> nodes) {
 		List<Integer> tmpInConnection = new ArrayList<Integer>();
@@ -663,7 +664,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 
 		connections.forEach((l, p) -> {
 			if (p.isExpressed()) { // SKIP UNEXPRESSED GENES
-				if (p.getInNode() != p.getOutNode()) { // REMOVE RECURRENT GENES.
+				if (p.getInNode() != p.getOutNode()) { // remove recurrent connections.
 					tmpInConnection.add(p.getInNode());
 					tmpOutConnection.add(p.getOutNode());
 				}
@@ -687,7 +688,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 
 		// CHECK FOR FEEDBACK ARC SETS
 		while (!tmpInConnection.isEmpty() && !tmpOutConnection.isEmpty()) {
-			x++; // flimsy solution
+			x++; // TODO: fix bad solution
 
 			if (x > nodeSignals.size()) {
 				System.out.println("DETECTED: FEEDBACK ARC IN FASTEST");
@@ -707,15 +708,12 @@ public class Genome implements Serializable { // serializable allows classes to 
 						tmpOutConnection.remove(j);
 					}
 
-					// need to have a termination condition for squisher lite. why does this differ
-					// from gr8 squisher in forward prop algorithm?
-					// call squisherLite
 					for (int k = 0; k < nodeSignals.size(); k++) {
 						Integer vals = nodeSignals.get(k);
 						for (int m = k + 1; m < nodeSignals.size(); m++) {
 							if (vals.equals(nodeSignals.get(m))) {
 								nodeSignals.remove(m);
-								k = 0; // was k--
+								k = 0; // TODO: fix initial condition so this can be k--
 							}
 						}
 					}
@@ -726,5 +724,4 @@ public class Genome implements Serializable { // serializable allows classes to 
 		}
 		return true;
 	}
-
 }

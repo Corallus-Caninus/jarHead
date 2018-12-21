@@ -63,23 +63,13 @@ public abstract class Evaluator {
 		this.connectionInnovation = connectionInnovation;
 		genomes = new ArrayList<Genome>(populationSize);
 		for (int i = 0; i < populationSize; i++) {
-			genomes.add(new Genome(startingGenome)); // can we introduce STORED GENOME once then fill with initial
-														// topology (fully connected input/outputs)? to help relieve
-														// local max and bootstrap speciation? need to fix crossover to
-														// implement this successfully. would introducing a genome
-														// affect innovation?
-														// Thrm.: not if initial topology is the same (equivalent
-														// topological genesis and innovation) since all subclasses to
-														// genome are
-														// serializable they should be serialized with the genome object
-														// (inc. innovation counter). can dynamic tuning of DT help
-														// transfer the genome from a local max?
-		} // i < populationSize-1; then add stored genome after this loop.
+			genomes.add(new Genome(startingGenome)); 
+		} // serialized genome injection: i < populationSize-1; then add stored genome after this loop.
 		nextGenGenomes = new ArrayList<Genome>(populationSize);
 		mappedSpecies = new HashMap<Genome, Species>();
 		scoreMap = new HashMap<Genome, Float>();
 		species = new ArrayList<Species>();
-	} // overload Evaluator to copy in an existing evaluator class (serialized)
+	} 
 
 	/**
 	 * Runs one generation.
@@ -112,7 +102,7 @@ public abstract class Evaluator {
 					break;
 				}
 			}
-			if (!foundSpecies) { // if there is no appropiate species for genome, make a new one
+			if (!foundSpecies) { // if there is no appropriate species for genome, make a new one
 				Species newSpecies = new Species(g);
 				species.add(newSpecies);
 				mappedSpecies.put(g, newSpecies);
@@ -145,7 +135,7 @@ public abstract class Evaluator {
 			}
 		}
 
-		// put best genomes from each species into next generation
+		// put best genomes from each species directly into next generation
 		// is this (fittestInSpecies) explicit fitness sharing from k.stanely?
 		for (Species s : species) {
 			Collections.sort(s.fitnessPop, fitComp);
@@ -162,7 +152,7 @@ public abstract class Evaluator {
 			Genome p2 = getRandomGenomeBiasedAdjustedFitness(s, random);
 
 			Genome child;
-			if (scoreMap.get(p1) >= scoreMap.get(p2)) { // this needs to be greater than exclusively.
+			if (scoreMap.get(p1) >= scoreMap.get(p2)) { // this needs to be greater than exclusively as per k.stanley.
 				child = Genome.crossover(p1, p2, random); // always give node topology to higher fitness parent
 			} else {
 				child = Genome.crossover(p2, p1, random);
@@ -173,7 +163,7 @@ public abstract class Evaluator {
 			}
 			if (random.nextFloat() < ADD_CONNECTION_RATE) {
 				// System.out.println("Adding connection mutation...");
-//				child.addConnectionMutation(random, connectionInnovation, 10); // TODO: pass child connections in to prevent gen 0 misalignment. dont have to do. children added in the loop 
+//				child.addConnectionMutation(random, connectionInnovation, 10);  
 				child.addConnectionMutation(random, connectionInnovation, 10, genomes);
 			}
 			if (random.nextFloat() < ADD_NODE_RATE) {
@@ -185,7 +175,7 @@ public abstract class Evaluator {
 				// keySet) in to
 				// check if added node's
 				// connections exist globally
-				// (node mutation occured
+				// (node mutation occurred
 				// elsewhere in this generation)
 			}
 			nextGenGenomes.add(child);
@@ -205,7 +195,7 @@ public abstract class Evaluator {
 	 * @return randomly selected species.
 	 */
 	private Species getRandomSpeciesBiasedAjdustedFitness(Random random) {
-		double completeWeight = 0.0; // sum of probablities of selecting each species - selection is more probable
+		double completeWeight = 0.0; // sum of probabilities of selecting each species - selection is more probable
 										// for species with higher fitness
 		for (Species s : species) {
 			completeWeight += s.totalAdjustedFitness;
@@ -231,7 +221,7 @@ public abstract class Evaluator {
 	 * @return selected genome.
 	 */
 	private Genome getRandomGenomeBiasedAdjustedFitness(Species selectFrom, Random random) {
-		double completeWeight = 0.0; // sum of probablities of selecting each genome - selection is more probable for
+		double completeWeight = 0.0; // sum of probabilities of selecting each genome - selection is more probable for
 										// genomes with higher fitness
 		for (FitnessGenome fg : selectFrom.fitnessPop) {
 			completeWeight += fg.fitness;

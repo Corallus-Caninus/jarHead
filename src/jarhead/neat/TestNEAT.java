@@ -114,8 +114,7 @@ public class TestNEAT {
 		Network network = new Network(eval.getFittestGenome());// complete. pass only fittest genome since that SEEMS to be the only one passed
 //		network.setup(eval.getFittestGenome());
 		System.out.println(sensors);
-		network.run(sensors); // not a bad thing that sensors gets chewed up as we wont be repeating values
-								// per each frame.
+		network.run(sensors); // TODO: make network immutable.
 		System.out.println("NEXT RUN");
 
 //		network.setup(eval.getFittestGenome()); //setup needs to be constructor..
@@ -202,7 +201,7 @@ public class TestNEAT {
 
 			out.writeObject(count);
 			out.close();
-			file.close(); // <3 the trash boat
+			file.close(); 
 			System.out.println("Counter has been serialized and saved");
 
 		} catch (IOException ex) {
