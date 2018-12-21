@@ -41,19 +41,27 @@ public class TestNEAT {
 		int n3 = nodeInnovation.getInnovation();
 		int n4 = nodeInnovation.getInnovation();
 		int n5 = nodeInnovation.getInnovation();
+		
+//		int n6 = nodeInnovation.getInnovation();
+//		int n7 = nodeInnovation.getInnovation();
 
 		NodeGene node1 = new NodeGene(TYPE.INPUT, n1);
 		NodeGene node2 = new NodeGene(TYPE.INPUT, n2);
-
 		NodeGene node3 = new NodeGene(TYPE.OUTPUT, n3);
 		NodeGene node4 = new NodeGene(TYPE.OUTPUT, n4);
 		NodeGene node5 = new NodeGene(TYPE.OUTPUT, n5);
-
+		
+//		NodeGene node6 = new NodeGene(TYPE.HIDDEN, n6);
+//		NodeGene node7 = new NodeGene(TYPE.HIDDEN, n7);
+		
 		parent2.addNodeGene(node1);
 		parent2.addNodeGene(node2);
 		parent2.addNodeGene(node3);
 		parent2.addNodeGene(node4);
 		parent2.addNodeGene(node5);
+
+//		parent2.addNodeGene(node6);
+//		parent2.addNodeGene(node7);
 
 		int c1 = connectionInnovation.getInnovation();
 		int c2 = connectionInnovation.getInnovation();
@@ -68,10 +76,15 @@ public class TestNEAT {
 		parent2.addConnectionGene(new ConnectionGene(n2, n3, 0.5f, true, c6));
 		parent2.addConnectionGene(new ConnectionGene(n2, n4, 0.5f, true, c3));
 		parent2.addConnectionGene(new ConnectionGene(n2, n5, 0.5f, true, c4));
+		
+//		for debugging:		
+//		eval.getFittestGenome().maxConnections();
+//		System.exit(0);
+		
 		writeGenome(parent2, "startGenome");
 		writeCounter(connectionInnovation, "lastConnectionInnovation");
 		writeCounter(nodeInnovation, "lastNodeInnovation");
-
+		
 		// overrides evaluation function (fitness function) to get highest weight sum
 		// (check hydroneat).
 		Evaluator eval = new Evaluator(100, parent2, nodeInnovation, connectionInnovation) {
@@ -87,7 +100,7 @@ public class TestNEAT {
 			}
 		};
 
-		for (int i = 0; i < 100; i++) {
+		for (int i = 0; i < 1000; i++) {
 			eval.evaluate();
 			System.out.print("Generation: " + i);
 			System.out.print("\tHighest fitness: " + eval.getHighestFitness());
@@ -114,7 +127,7 @@ public class TestNEAT {
 		Network network = new Network(eval.getFittestGenome());// complete. pass only fittest genome since that SEEMS to be the only one passed
 //		network.setup(eval.getFittestGenome());
 		System.out.println(sensors);
-		network.run(sensors); // TODO: make network immutable.
+		network.run(sensors); // TODO: make network immutable. use stream method in network.
 		System.out.println("NEXT RUN");
 
 //		network.setup(eval.getFittestGenome()); //setup needs to be constructor..
@@ -130,7 +143,7 @@ public class TestNEAT {
 	} // end of main.
 
 	/**
-	 * @author Badass_Cyborg
+	 * @author ElectricIsotope
 	 */
 	public static void writeBestGenome(Evaluator eval, String filename) {
 

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Stack;
+import java.util.stream.Collectors;
 
 import jarhead.NodeGene.TYPE;
 
@@ -723,5 +724,42 @@ public class Genome implements Serializable { // serializable allows classes to 
 
 		}
 		return true;
+	}
+
+	// make private at a later time. only public for debugging. will be implemented
+	// as a maxAttempt ceiling for tries in addConnectionMutation.
+	public int maxConnections() { // CURRENTLY HERE
+		int hiddenNodes;
+		int inputNodes;
+		int outputNodes;
+		int boundaryNodes;
+
+		// we can use parallel streams on nodes because we do not alter the data
+		// structure.
+		hiddenNodes = (int) nodes.entrySet().parallelStream()
+				.filter(p -> p.getValue().getType() == NodeGene.TYPE.HIDDEN).count();
+		outputNodes = (int) nodes.entrySet().parallelStream()
+				.filter(p -> p.getValue().getType() == NodeGene.TYPE.OUTPUT).count();
+		inputNodes = (int) nodes.entrySet().parallelStream().filter(p -> p.getValue().getType() == NodeGene.TYPE.INPUT)
+				.count();
+		// first calculate possible connections with input and output nodes as they can
+		// only be connected one way.
+		boundaryNodes = inputNodes * (hiddenNodes + outputNodes) + hiddenNodes * outputNodes;
+		// working. Is this the solution? No, doesn't count for FAS/circularity. will
+		// lead to more failed tries in connectionMutation than necessary.
+
+		System.out.println("Input Nodes: " + inputNodes);
+		System.out.println("Output Nodes: " + outputNodes);
+		System.out.println("Hidden Nodes: " + hiddenNodes);
+		System.out.println("Potential boundary connections: " + boundaryNodes);
+		return 0;
+		/*
+		 * //(x==0) ? f(0) = 0 : f(x) = f(x-1) + (x-1) -> for A(n+)
+		 * 
+		 * int prev = 0, result = 0; for(int i = 1; i < hiddenNodes; i++) { result =
+		 * prev + (i-1); //if(i>0?) prev = result; }
+		 * 
+		 * return result + boundaryNodes;
+		 */
 	}
 }
