@@ -1,16 +1,13 @@
 package jarhead;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.ArrayList;
 import java.util.HashMap;
-//import java.util.LinkedList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Stack;
-import java.util.stream.Collectors;
 
 import jarhead.NodeGene.TYPE;
 
@@ -177,7 +174,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 							// parameters.
 			}
 
-			// Global connection check
+			// TODO: delete this and replace with connection exists method
 			for (Genome g : genomes) {
 				for (ConnectionGene c : g.connections.values()) {
 					if ((c.getInNode() == node2.getId() || c.getInNode() == node1.getId())
@@ -217,10 +214,10 @@ public class Genome implements Serializable { // serializable allows classes to 
 			}
 		}
 		if (success == false) {
-			System.out.println("Tried, but could not add more connections"); // TODO: make infinite condition to allow a
+			System.out.println("Tried, but could not add more connections"); // TODO: make variable condition to allow a
 																				// connection to be added and keep
 																				// mutation rate consistent across
-																				// large topologies (scaling)
+																				// large topologies (scaling).
 		}
 	}
 
@@ -253,6 +250,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 		ConnectionGene newToOut = new ConnectionGene(newNode.getId(), outNode.getId(), con.getWeight(), true,
 				connectionInnovation.getInnovation());
 
+		// TODO: delete this and replace with connection exists method.
 		for (Genome g : genomes) {
 			for (ConnectionGene c : g.connections.values()) {
 				if ((c.getInNode() == inToNew.getInNode() || c.getInNode() == newToOut.getInNode())
@@ -577,7 +575,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 	// (fundamental to NEAT algorithm per stanely)
 
 	// TODO: use DFS instead of backwards propagation to find FAS. how can depth be
-	// assigned in this case?
+	// assigned in this case? Is this still viable: Review this.
 	/**
 	 * @deprecated
 	 * 
@@ -655,6 +653,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 	// as well. each connection mutation has a chance to change depth assignment.
 	// Does this make DFS search a sub-optimal solution?
 
+	// static because doesnt use any class scope variables.
 	public static boolean FASTest(Map<Integer, ConnectionGene> connections, Map<Integer, NodeGene> nodes) {
 		List<Integer> tmpInConnection = new ArrayList<Integer>();
 		List<Integer> tmpOutConnection = new ArrayList<Integer>();
@@ -726,8 +725,15 @@ public class Genome implements Serializable { // serializable allows classes to 
 		return true;
 	}
 
-	// make private at a later time. only public for debugging. will be implemented
-	// as a maxAttempt ceiling for tries in addConnectionMutation.
+	// will be implemented as a maxAttempt ceiling for tries in
+	// addConnectionMutation. Instantiate sort interface to find depth in parallel
+	// stream method. what is sort's function descriptor?
+	/**
+	 * Calculates the maximum number of connections possible for a given topology
+	 * (set of nodes).
+	 * 
+	 * @return integer number of connections.
+	 */
 	public int maxConnections() { // CURRENTLY HERE
 		int hiddenNodes;
 		int inputNodes;
@@ -761,5 +767,45 @@ public class Genome implements Serializable { // serializable allows classes to 
 		 * 
 		 * return result + boundaryNodes;
 		 */
+	}
+
+	/**
+	 * Compares a ConnectionGene to all connections in a Gene pool. Used for global
+	 * consistency of Connection innovation.
+	 * 
+	 * @param genomes  List of all genomes to be compared against.
+	 * @param proposed connection gene to be checked.
+	 * @return matched connection gene if found else returns current connection
+	 *         gene.
+	 */
+	public ConnectionGene exists(List<Genome> genomes, ConnectionGene currentConnection) {
+		// TODO: log number of parallel threads to verify parallelStream method works on
+		// this data structure type. verify Genomes and connectionGenes require
+		// parallelism and not one or the other.
+		//
+		// test this.method.
+
+		Optional<Genome> match = genomes.parallelStream()
+				.filter(g -> g.getConnectionGenes().values().parallelStream()
+						.anyMatch(c -> c.getInNode() == currentConnection.getInNode()
+								|| c.getOutNode() == currentConnection.getOutNode()))
+				.findAny();
+
+		if (match.isPresent()) {
+			ConnectionGene mycnct = new ConnectionGene(match.get().connections.values().parallelStream()
+					.filter(c -> c.getInNode() == currentConnection.getInNode()
+							|| c.getOutNode() == currentConnection.getOutNode())
+					.findAny().get()); // are all three above parallelStreams necessary? do these fallback to
+										// sequential streams appropriately or add additional overhead for small
+										// collections? log and test JVM stats
+
+			return mycnct;
+		} else {
+			return currentConnection;
+		}
+
+//		System.out.println(genomes.parallelStream().filter(g -> g.getConnectionGenes().values().parallelStream()
+//				.anyMatch(c -> c.inNode == this.inNode || c.outNode == this.outNode)).count());
+
 	}
 }
