@@ -1,11 +1,7 @@
 package jarhead.neat;
 
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Random;
 
 import jarhead.ConnectionGene;
 import jarhead.Counter;
@@ -14,7 +10,6 @@ import jarhead.Genome;
 import jarhead.Network;
 import jarhead.NodeGene;
 import jarhead.NodeGene.TYPE;
-import jarhead.test.GenomePrinter;
 
 import java.io.*;
 
@@ -41,7 +36,7 @@ public class TestNEAT {
 		int n3 = nodeInnovation.getInnovation();
 		int n4 = nodeInnovation.getInnovation();
 		int n5 = nodeInnovation.getInnovation();
-		
+
 //		int n6 = nodeInnovation.getInnovation();
 //		int n7 = nodeInnovation.getInnovation();
 
@@ -50,10 +45,10 @@ public class TestNEAT {
 		NodeGene node3 = new NodeGene(TYPE.OUTPUT, n3);
 		NodeGene node4 = new NodeGene(TYPE.OUTPUT, n4);
 		NodeGene node5 = new NodeGene(TYPE.OUTPUT, n5);
-		
+
 //		NodeGene node6 = new NodeGene(TYPE.HIDDEN, n6);
 //		NodeGene node7 = new NodeGene(TYPE.HIDDEN, n7);
-		
+
 		parent2.addNodeGene(node1);
 		parent2.addNodeGene(node2);
 		parent2.addNodeGene(node3);
@@ -76,15 +71,15 @@ public class TestNEAT {
 		parent2.addConnectionGene(new ConnectionGene(n2, n3, 0.5f, true, c6));
 		parent2.addConnectionGene(new ConnectionGene(n2, n4, 0.5f, true, c3));
 		parent2.addConnectionGene(new ConnectionGene(n2, n5, 0.5f, true, c4));
-		
+
 //		for debugging:		
 //		eval.getFittestGenome().maxConnections();
 //		System.exit(0);
-		
+
 		writeGenome(parent2, "startGenome");
 		writeCounter(connectionInnovation, "lastConnectionInnovation");
 		writeCounter(nodeInnovation, "lastNodeInnovation");
-		
+
 		// overrides evaluation function (fitness function) to get highest weight sum
 		// (check hydroneat).
 		Evaluator eval = new Evaluator(100, parent2, nodeInnovation, connectionInnovation) {
@@ -99,6 +94,14 @@ public class TestNEAT {
 				return weightSum;
 			}
 		};
+
+		// ConnectionGene.globalCheck test.
+		System.out.println("innovation check against: " + parent2.getConnectionGenes().get(0).getInnovation());
+		System.out.println(parent2.getConnectionGenes().get(0).globalCheck(eval.getGenomes()).getInnovation());
+		System.out.println("versus: ");
+		System.out.println(new ConnectionGene(100, 101, 0.5f, true, 12).globalCheck(eval.getGenomes()).getInnovation());
+		System.exit(0);
+		// WORKING
 
 		for (int i = 0; i < 1000; i++) {
 			eval.evaluate();
@@ -119,12 +122,13 @@ public class TestNEAT {
 		} // was below
 
 //		Network network = new Network(eval.getFittestGenome());// complete. pass only fittest genome since that SEEMS to be the only one passed over generations per species
-										// over generations per species		
+		// over generations per species
 		List<Float> sensors = new ArrayList<Float>();
 		sensors.add(1f);
 		sensors.add(2f); // now network.run(sensors);
 
-		Network network = new Network(eval.getFittestGenome());// complete. pass only fittest genome since that SEEMS to be the only one passed
+		Network network = new Network(eval.getFittestGenome());// complete. pass only fittest genome since that SEEMS to
+																// be the only one passed
 //		network.setup(eval.getFittestGenome());
 		System.out.println(sensors);
 		network.run(sensors); // TODO: make network immutable. use stream method in network.
@@ -158,7 +162,7 @@ public class TestNEAT {
 
 			out.writeObject(winner);
 			out.close();
-			file.close(); 
+			file.close();
 			System.out.println("genome has been serialized and saved");
 
 		} catch (IOException ex) {
@@ -174,7 +178,7 @@ public class TestNEAT {
 
 			out.writeObject(genome);
 			out.close();
-			file.close(); 
+			file.close();
 			System.out.println("genome has been serialized and saved");
 
 		} catch (IOException ex) {
@@ -214,7 +218,7 @@ public class TestNEAT {
 
 			out.writeObject(count);
 			out.close();
-			file.close(); 
+			file.close();
 			System.out.println("Counter has been serialized and saved");
 
 		} catch (IOException ex) {

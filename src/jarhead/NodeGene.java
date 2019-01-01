@@ -10,7 +10,7 @@ public class NodeGene implements Serializable {
 	private static final long serialVersionUID = 149348938L;
 
 	public enum TYPE {
-		INPUT, HIDDEN, OUTPUT,;//BIAS (SENSOR is input)
+		INPUT, HIDDEN, OUTPUT,;// BIAS (SENSOR is input)
 	}
 
 	private TYPE type;
@@ -24,7 +24,7 @@ public class NodeGene implements Serializable {
 	 * @param id   id number. equivalent to innovation number for node gene but not
 	 *             necessary for compatibility distance function.
 	 */
-	public NodeGene(TYPE type, int id/*, float activation*/) {
+	public NodeGene(TYPE type, int id/* , float activation */) {
 		this.type = type;
 		this.id = id;
 //		this.activation = activation;//*sigmoid activation function*. how does this affect crossover? does this need to be in connectiongene?
@@ -48,5 +48,7 @@ public class NodeGene implements Serializable {
 	public int getId() {
 		return id;
 	}
-	
+	// TODO: add public bool signalPassed to allow gate keeping of recurrent (and in
+	// the future cyclic) signals.
+
 }

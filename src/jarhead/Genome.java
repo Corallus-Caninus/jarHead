@@ -768,44 +768,4 @@ public class Genome implements Serializable { // serializable allows classes to 
 		 * return result + boundaryNodes;
 		 */
 	}
-
-	/**
-	 * Compares a ConnectionGene to all connections in a Gene pool. Used for global
-	 * consistency of Connection innovation.
-	 * 
-	 * @param genomes  List of all genomes to be compared against.
-	 * @param proposed connection gene to be checked.
-	 * @return matched connection gene if found else returns current connection
-	 *         gene.
-	 */
-	public ConnectionGene exists(List<Genome> genomes, ConnectionGene currentConnection) {
-		// TODO: log number of parallel threads to verify parallelStream method works on
-		// this data structure type. verify Genomes and connectionGenes require
-		// parallelism and not one or the other.
-		//
-		// test this.method.
-
-		Optional<Genome> match = genomes.parallelStream()
-				.filter(g -> g.getConnectionGenes().values().parallelStream()
-						.anyMatch(c -> c.getInNode() == currentConnection.getInNode()
-								|| c.getOutNode() == currentConnection.getOutNode()))
-				.findAny();
-
-		if (match.isPresent()) {
-			ConnectionGene mycnct = new ConnectionGene(match.get().connections.values().parallelStream()
-					.filter(c -> c.getInNode() == currentConnection.getInNode()
-							|| c.getOutNode() == currentConnection.getOutNode())
-					.findAny().get()); // are all three above parallelStreams necessary? do these fallback to
-										// sequential streams appropriately or add additional overhead for small
-										// collections? log and test JVM stats
-
-			return mycnct;
-		} else {
-			return currentConnection;
-		}
-
-//		System.out.println(genomes.parallelStream().filter(g -> g.getConnectionGenes().values().parallelStream()
-//				.anyMatch(c -> c.inNode == this.inNode || c.outNode == this.outNode)).count());
-
-	}
 }
