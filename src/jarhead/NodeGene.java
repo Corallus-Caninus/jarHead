@@ -27,7 +27,7 @@ public class NodeGene implements Serializable {
 	public NodeGene(TYPE type, int id/* , float activation */) {
 		this.type = type;
 		this.id = id;
-//		this.activation = activation;//*sigmoid activation function*. how does this affect crossover? does this need to be in connectiongene?
+//		this.activation = activation;//*sigmoid activation function*. Just a thought does this need to be in connectiongene?
 	}
 
 	/**
@@ -50,5 +50,7 @@ public class NodeGene implements Serializable {
 	}
 	// TODO: add public bool signalPassed to allow gate keeping of recurrent (and in
 	// the future cyclic) signals.
+
+	// TODO: add public depth value to set during parameterized sort method.
 
 }

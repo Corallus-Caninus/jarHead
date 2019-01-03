@@ -174,7 +174,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 							// parameters.
 			}
 
-			// TODO: delete this and replace with connection exists method
+			// TODO: delete this and replace with globalCheck method
 			for (Genome g : genomes) {
 				for (ConnectionGene c : g.connections.values()) {
 					if ((c.getInNode() == node2.getId() || c.getInNode() == node1.getId())
@@ -214,10 +214,10 @@ public class Genome implements Serializable { // serializable allows classes to 
 			}
 		}
 		if (success == false) {
-			System.out.println("Tried, but could not add more connections"); // TODO: make variable condition to allow a
-																				// connection to be added and keep
-																				// mutation rate consistent across
-																				// large topologies (scaling).
+			System.out.println("Tried, but could not add more connections");
+			// TODO: implement Genome.maxConnections condition to allow a connection to be
+			// consistently added therefore keeping mutation rate consistent across large
+			// topologies (scaling).
 		}
 	}
 
@@ -250,7 +250,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 		ConnectionGene newToOut = new ConnectionGene(newNode.getId(), outNode.getId(), con.getWeight(), true,
 				connectionInnovation.getInnovation());
 
-		// TODO: delete this and replace with connection exists method.
+		// TODO: delete this and replace with globalCheck method.
 		for (Genome g : genomes) {
 			for (ConnectionGene c : g.connections.values()) {
 				if ((c.getInNode() == inToNew.getInNode() || c.getInNode() == newToOut.getInNode())
