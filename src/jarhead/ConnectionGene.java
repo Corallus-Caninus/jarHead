@@ -98,30 +98,11 @@ public class ConnectionGene implements Serializable {
 	public ConnectionGene globalCheck(List<Genome> genomes) {
 		// TODO: log number of parallel threads to verify parallelStream method works on
 		// this data structure type. verify Genomes and connectionGenes require
-		// parallelism and not one, the other or neither. Should this be two seperate
-		// methods? exists and fetch? how will this be called in practice?
-		//
-		// test this.method.
-
-		// Search Genomes
-		Optional<Genome> match = genomes.parallelStream().filter(g -> g.getConnectionGenes().values().parallelStream()
-				.anyMatch(c -> c.inNode == this.inNode && c.outNode == this.outNode)).findAny();
-
-		// Search Connections of matched Genome
-		if (match.isPresent()) {
-			ConnectionGene mycnct = new ConnectionGene(match.get().getConnectionGenes().values().parallelStream()
-					.filter(c -> c.inNode == this.inNode && c.outNode == this.outNode).findAny().get());
-			// are all three above parallelStreams necessary? do these fallback to
-			// sequential streams appropriately or add additional overhead for small
-			// collections? log and test JVM stats
-
-			return mycnct;
-		} else {
-			return this;
-		}
-
-//		System.out.println(genomes.parallelStream().filter(g -> g.getConnectionGenes().values().parallelStream()
-//				.anyMatch(c -> c.inNode == this.inNode || c.outNode == this.outNode)).count());
-
+		// parallelism and not one, the other or neither. How will this be called in
+		// practice?
+		Optional<ConnectionGene> match = genomes.parallelStream().map(g -> g.getConnectionGenes())
+				.flatMap(c -> c.values().parallelStream().filter(l -> l.inNode == inNode && l.outNode == outNode))
+				.findAny();
+		return match.orElse(this);
 	}
 }
