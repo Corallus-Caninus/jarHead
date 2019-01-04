@@ -32,7 +32,6 @@ public class Genome implements Serializable { // serializable allows classes to 
 
 	private final float PROBABILITY_PERTURBING = 0.9f; // should this be passed in to mutation method from evaluator?
 
-	// TODO: how are connection innovations globally iterated WRT counter class?
 	private Map<Integer, ConnectionGene> connections; // Integer map key is equivalent to connection innovation
 	private Map<Integer, NodeGene> nodes; // Integer map key is equivalent to node innovation aka node ID
 
@@ -128,8 +127,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 		List<Integer> inConnections = new ArrayList<Integer>();
 		List<Integer> outConnections = new ArrayList<Integer>();
 
-		Integer[] nodeInnovationNumbers = new Integer[nodes.keySet().size()]; // this should be possible because
-		nodes.keySet().toArray(nodeInnovationNumbers); // only one mutation added each call to addConnectionMut
+		Integer[] nodeInnovationNumbers = new Integer[nodes.keySet().size()];
+		nodes.keySet().toArray(nodeInnovationNumbers);
 
 		while (tries < maxAttempts && success == false) {
 			tries++;
@@ -158,7 +157,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 			}
 
 			boolean connectionExists = false;
-			for (ConnectionGene con : connections.values()) { // check if connection exists already
+			for (ConnectionGene con : connections.values()) { // check if connection exists already (locally)
 				if (con.getInNode() == node1.getId() && con.getOutNode() == node2.getId()) { // existing connection
 					connectionExists = true;
 					break;
@@ -170,30 +169,9 @@ public class Genome implements Serializable { // serializable allows classes to 
 			}
 
 			if (connectionExists || connectionImpossible) {
-				continue; // "executes next value in loop" however no value is iterated in loop
-							// parameters.
+				continue; // this is fine as it makes sense to check locally before checking globally
 			}
 
-			// TODO: delete this and replace with globalCheck method
-			for (Genome g : genomes) {
-				for (ConnectionGene c : g.connections.values()) {
-					if ((c.getInNode() == node2.getId() || c.getInNode() == node1.getId())
-							&& (c.getOutNode() == node1.getId()) || c.getOutNode() == node2.getId()) {
-						// connection exists globally. Add connection with respective innovation number
-						// but not impossible. make sure all connections are seen globally so we dont
-						// get generation 0 misalignment. HOW DO WE HANDLE DISABLED CONNECTIONS?
-						ConnectionGene newCon = new ConnectionGene(c);
-						newCon.enable(); // enable connection gene in case it was a disabled but existed globally
-						connections.put(newCon.getInnovation(), newCon);
-						if (FASTest(connections, nodes)) {
-							return;
-						} else {
-							connections.remove(newCon.getInnovation());
-						}
-					}
-				}
-			} // else make a novel connection
-				// Connection gene assemble.
 			ConnectionGene newCon = new ConnectionGene(reversed ? node2.getId() : node1.getId(),
 					reversed ? node1.getId() : node2.getId(), weight, true, innovation.getInnovation());
 			connections.put(newCon.getInnovation(), newCon);
@@ -205,11 +183,14 @@ public class Genome implements Serializable { // serializable allows classes to 
 				}
 			}
 
-			if (!FASTest(connections, nodes)) {
+			if (!FASTest(connections, nodes)) { // check local circularity
 				connections.remove(newCon.getInnovation()); // does this break innovation counter? Don't mistake
 															// con.getInnovation for count.getInnovation
 				continue;
 			} else {
+				newCon.globalCheck(genomes); // call globalCheck here (to prevent checking all circularity conditions
+												// against global gene pool). this always returns a connection, should
+												// simply keep innovation consistent.
 				success = true;
 			}
 		}
@@ -250,28 +231,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 		ConnectionGene newToOut = new ConnectionGene(newNode.getId(), outNode.getId(), con.getWeight(), true,
 				connectionInnovation.getInnovation());
 
-		// TODO: delete this and replace with globalCheck method.
-		for (Genome g : genomes) {
-			for (ConnectionGene c : g.connections.values()) {
-				if ((c.getInNode() == inToNew.getInNode() || c.getInNode() == newToOut.getInNode())
-						&& (c.getOutNode() == inToNew.getInNode()) || c.getOutNode() == newToOut.getOutNode()) {
-					// check in connection then out connection
-					// respectively
-					// connection exists globally. Add connection with respective innovation number
-					// but not impossible. make sure all connections are seen globally so we dont
-					// get generation 0 misalignment
-					ConnectionGene newCon = new ConnectionGene(c);
-					connections.put(newCon.getInnovation(), newCon);
-					return;
-				} else if ((c.getOutNode() == inToNew.getInNode() || c.getOutNode() == newToOut.getInNode())
-						&& (c.getInNode() == inToNew.getInNode()) || c.getInNode() == newToOut.getOutNode()) {
-					// check reversed case
-					ConnectionGene newCon = new ConnectionGene(c);
-					connections.put(newCon.getInnovation(), newCon);
-					return;
-				}
-			}
-		}
+		inToNew.globalCheck(genomes);
+		newToOut.globalCheck(genomes);
 
 		nodes.put(newNode.getId(), newNode);
 		connections.put(inToNew.getInnovation(), inToNew);
