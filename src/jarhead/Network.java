@@ -22,6 +22,8 @@ import java.util.Random;
  *
  */
 
+//TODO: PRIMARY: Rewrite with streams. everything here should be java 8 immutable method (setup is overrated. sorting to depth will suffice).
+
 //TODO: REFACTOR
 public class Network {
 	// PERSISTENT DATA STRUCTURES
@@ -84,7 +86,8 @@ public class Network {
 	// structure divergence in setup vs. run.
 
 	// TODO: organize into depth layers. matrix multiplication with minimum memory
-	// access < data structure manipulation processing time (think recursive solution on
+	// access < data structure manipulation processing time (think recursive
+	// solution on
 	// the stack time). use stream method to not alter data structure in run method.
 
 	// this may fix the above todo: for(;depth<maxDepth;++) as a finite solution.

@@ -63,13 +63,14 @@ public abstract class Evaluator {
 		this.connectionInnovation = connectionInnovation;
 		genomes = new ArrayList<Genome>(populationSize);
 		for (int i = 0; i < populationSize; i++) {
-			genomes.add(new Genome(startingGenome)); 
-		} // serialized genome injection: i < populationSize-1; then add stored genome after this loop.
+			genomes.add(new Genome(startingGenome));
+		} // serialized genome injection: i < populationSize-1; then add stored genome
+			// after this loop.
 		nextGenGenomes = new ArrayList<Genome>(populationSize);
 		mappedSpecies = new HashMap<Genome, Species>();
 		scoreMap = new HashMap<Genome, Float>();
 		species = new ArrayList<Species>();
-	} 
+	}
 
 	/**
 	 * Runs one generation.
@@ -110,7 +111,6 @@ public abstract class Evaluator {
 		}
 
 		// Remove unused species
-		// in what case is there unused species? mapped species is cleared each iteration
 		Iterator<Species> iter = species.iterator();
 		while (iter.hasNext()) {
 			Species s = iter.next();
@@ -137,6 +137,7 @@ public abstract class Evaluator {
 
 		// put best genomes from each species directly into next generation
 		// is this (fittestInSpecies) explicit fitness sharing from k.stanely?
+		// TODO: write as java 8 stream
 		for (Species s : species) {
 			Collections.sort(s.fitnessPop, fitComp);
 			Collections.reverse(s.fitnessPop);
@@ -163,7 +164,6 @@ public abstract class Evaluator {
 			}
 			if (random.nextFloat() < ADD_CONNECTION_RATE) {
 				// System.out.println("Adding connection mutation...");
-//				child.addConnectionMutation(random, connectionInnovation, 10);  
 				child.addConnectionMutation(random, connectionInnovation, 10, genomes);
 			}
 			if (random.nextFloat() < ADD_NODE_RATE) {
@@ -182,7 +182,8 @@ public abstract class Evaluator {
 		}
 
 		genomes = nextGenGenomes;
-		nextGenGenomes = new ArrayList<Genome>();
+		nextGenGenomes = new ArrayList<Genome>();// TODO: Innovation numbers are lost here. does K.Stanley ever lose
+													// innovations count? should connections be separate from genomes?
 	}
 
 	// where is explicit fitness sharing executed?
@@ -221,7 +222,8 @@ public abstract class Evaluator {
 	 * @return selected genome.
 	 */
 	private Genome getRandomGenomeBiasedAdjustedFitness(Species selectFrom, Random random) {
-		double completeWeight = 0.0; // sum of probabilities of selecting each genome - selection is more probable for
+		double completeWeight = 0.0; // sum of probabilities of selecting each genome - selection is more probable
+										// for
 										// genomes with higher fitness
 		for (FitnessGenome fg : selectFrom.fitnessPop) {
 			completeWeight += fg.fitness;
