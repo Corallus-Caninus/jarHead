@@ -119,7 +119,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 	 * @param innovation  counter object.
 	 * @param maxAttempts ends connections after this number.
 	 */
-	public void addConnectionMutation(Random r, Counter innovation, int maxAttempts, List<Genome> genomes) {
+	public void addConnectionMutation(Random r, Counter innovation, List<Genome> genomes) {
 		int tries = 0;
 		boolean success = false;
 		// maxAttempts = maxConnections() //maxConnections operates on connections.
@@ -130,7 +130,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 		Integer[] nodeInnovationNumbers = new Integer[nodes.keySet().size()];
 		nodes.keySet().toArray(nodeInnovationNumbers);
 
-		while (tries < maxAttempts && success == false) {
+		while (tries < this.maxConnections() && success == false) {
 			tries++;
 
 			Integer keyNode1 = nodeInnovationNumbers[r.nextInt(nodeInnovationNumbers.length)];
@@ -195,7 +195,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 			}
 		}
 		if (success == false) {
-			System.out.println("Tried, but could not add more connections");
+			System.out.println("DETECTED: maxAttempt reached, genome contains all possible connections!");
 			// TODO: implement Genome.maxConnections condition to allow a connection to be
 			// consistently added therefore keeping mutation rate consistent across large
 			// topologies (scaling).
@@ -687,22 +687,17 @@ public class Genome implements Serializable { // serializable allows classes to 
 	}
 
 	// will be implemented as a maxAttempt ceiling for tries in
-	// addConnectionMutation. Instantiate sort interface to find depth in parallel
-	// stream method. what is sort's function descriptor?
+	// addConnectionMutation.
 	/**
 	 * Calculates the maximum number of connections possible for a given topology
-	 * (set of nodes).
+	 * (NodeGenes).
 	 * 
 	 * @return integer number of connections.
 	 */
 	public int maxConnections() { // CURRENTLY HERE
-		int hiddenNodes;
-		int inputNodes;
-		int outputNodes;
-		int boundaryNodes;
+		int hiddenNodes, inputNodes, outputNodes, boundaryNodes;
+		int prev = 0, next = 0;
 
-		// we can use parallel streams on nodes because we do not alter the data
-		// structure.
 		hiddenNodes = (int) nodes.entrySet().parallelStream()
 				.filter(p -> p.getValue().getType() == NodeGene.TYPE.HIDDEN).count();
 		outputNodes = (int) nodes.entrySet().parallelStream()
@@ -712,14 +707,20 @@ public class Genome implements Serializable { // serializable allows classes to 
 		// first calculate possible connections with input and output nodes as they can
 		// only be connected one way.
 		boundaryNodes = inputNodes * (hiddenNodes + outputNodes) + hiddenNodes * outputNodes;
-		// working. Is this the solution? No, doesn't count for FAS/circularity. will
-		// lead to more failed tries in connectionMutation than necessary.
+		// all possible connections from boundary nodes
 
-		System.out.println("Input Nodes: " + inputNodes);
-		System.out.println("Output Nodes: " + outputNodes);
-		System.out.println("Hidden Nodes: " + hiddenNodes);
-		System.out.println("Potential boundary connections: " + boundaryNodes);
-		return 0;
+//		System.out.println("Hidden Nodes: " + hiddenNodes);
+//		System.out.println("Potential boundary connections: " + boundaryNodes);
+		
+		if(hiddenNodes == 0) {
+			return boundaryNodes;
+		}else {
+			for(int i = 1; i <= hiddenNodes; i++) { 
+				next = prev + (i-1);
+				prev = next;
+			}
+			return next + boundaryNodes;
+		}
 		/*
 		 * //(x==0) ? f(0) = 0 : f(x) = f(x-1) + (x-1) -> for A(n+)
 		 * 

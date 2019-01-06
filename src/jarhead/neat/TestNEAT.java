@@ -113,18 +113,7 @@ public class TestNEAT {
 			System.out.print("\n");
 		} // was below
 
-		List<Integer> innovationCount = new ArrayList<>();
-		for(Genome g : eval.getGenomes()) {
-			for(ConnectionGene c : g.getConnectionGenes().values()) {
-				innovationCount.add(c.getInnovation());
-			}
-		}
-		innovationCount.sort((i1, i2)->
-				i1.compareTo(i2)
-		);
-		innovationCount.forEach(e->System.out.println(e));
-//		Network network = new Network(eval.getFittestGenome());// complete. pass only fittest genome since that SEEMS to be the only one passed over generations per species
-		// over generations per species
+		
 		List<Float> sensors = new ArrayList<Float>();
 		sensors.add(1f);
 		sensors.add(2f); // now network.run(sensors);

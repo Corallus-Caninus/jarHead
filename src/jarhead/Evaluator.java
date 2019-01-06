@@ -13,7 +13,6 @@ import java.util.Random;
 /**
  * Evaluator class.
  */
-//TODO: can we multithread this? distribute?
 public abstract class Evaluator {
 
 	private FitnessGenomeComparator fitComp = new FitnessGenomeComparator();
@@ -164,19 +163,11 @@ public abstract class Evaluator {
 			}
 			if (random.nextFloat() < ADD_CONNECTION_RATE) {
 				// System.out.println("Adding connection mutation...");
-				child.addConnectionMutation(random, connectionInnovation, 10, genomes);
+				child.addConnectionMutation(random, connectionInnovation, genomes);
 			}
 			if (random.nextFloat() < ADD_NODE_RATE) {
 				// System.out.println("Adding node mutation...");
-				child.addNodeMutation(random, connectionInnovation, nodeInnovation, genomes); // TODO: pass connection
-																								// list (and
-				// node list? technically they
-				// have innovation number in the
-				// keySet) in to
-				// check if added node's
-				// connections exist globally
-				// (node mutation occurred
-				// elsewhere in this generation)
+				child.addNodeMutation(random, connectionInnovation, nodeInnovation, genomes);
 			}
 			nextGenGenomes.add(child);
 		}
@@ -184,6 +175,8 @@ public abstract class Evaluator {
 		genomes = nextGenGenomes;
 		nextGenGenomes = new ArrayList<Genome>();// TODO: Innovation numbers are lost here. does K.Stanley ever lose
 													// innovations count? should connections be separate from genomes?
+													// if separate, why not use a static LUT?? Doesnt effect crossover
+													// therefore not critical.
 	}
 
 	// where is explicit fitness sharing executed?
