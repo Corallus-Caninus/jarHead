@@ -42,10 +42,6 @@ public class Network {
 	// (LOOK AHEAD ONE
 	// INDEX TO SEE WHEN WE SHOULD ACCUMULATE AND ACTIVATE)
 
-	// consider sorting connections into rows for fast propagation or into sequence
-	// of connections for faster propagation (I want to pop one data structure and
-	// pop/push signals on one other structure to propagate).
-
 	// CONSTRUCTOR
 	public Network(Genome genome) {
 		genome.getConnectionGenes().forEach((x, l) -> { // NOTE: setup constructor is in theory parallel already due to
@@ -78,9 +74,6 @@ public class Network {
 		});
 	}
 
-	// OLD IDEA: use a separate structure like last time and implement an input
-	// array. run should take input signals parameter as an index matching array to
-	// input array
 
 	// TODO: make all infinite loops finite. fix squisher algorithm. fix static data
 	// structure divergence in setup vs. run.

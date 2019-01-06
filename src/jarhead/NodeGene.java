@@ -15,7 +15,6 @@ public class NodeGene implements Serializable {
 
 	private TYPE type;
 	private int id;
-	private float activation;
 
 	/**
 	 * Constructs a new Node Gene
