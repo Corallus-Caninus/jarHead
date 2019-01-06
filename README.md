@@ -4,10 +4,10 @@
 
 ## Project Objectives ##
 - Investigate and apply the NEAT algorithm within the SSCAIT platform.
-https://sscaitournament.com/
+https://sscaitournament.com/ [scheduled]
 
-- Achieve better understanding of Machine Learning methods outside of backpropagation. [complete] 
+- Achieve better understanding of Machine Learning methods outside of backpropagation and learn Java. [complete] 
 
 - Develop a more universal machine learning algorithm with less hyperparameter tuning. [WIP]
 
-- Research and develop artificial neural networks with genetic algorithms using purely stochastic methods. [scheduled]
+- Research and develop artificial neural networks with genetic algorithms using purely stochastic methods. 
