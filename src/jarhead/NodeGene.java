@@ -16,6 +16,11 @@ public class NodeGene implements Serializable {
 	private TYPE type;
 	private int id;
 
+	// added bool activated to allow gate keeping of recurrent (and in
+	// the future cyclic) signals during forward prop.
+	private boolean activated;
+	private int depth; 
+	
 	/**
 	 * Constructs a new Node Gene
 	 * 
@@ -26,11 +31,13 @@ public class NodeGene implements Serializable {
 	public NodeGene(TYPE type, int id/* , float activation */) {
 		this.type = type;
 		this.id = id;
+		activated = false;
+		depth = 0;
 //		this.activation = activation;//*sigmoid activation function*. Just a thought does this need to be in connectiongene?
 	}
 
 	/**
-	 * Inherits a Node Gene
+	 * Inherits a Node Gene. Redundant with respect to constructor
 	 * 
 	 * @param gene Node Gene to be inherited
 	 */
@@ -47,9 +54,21 @@ public class NodeGene implements Serializable {
 	public int getId() {
 		return id;
 	}
-	// TODO: add public bool signalPassed to allow gate keeping of recurrent (and in
-	// the future cyclic) signals.
-
-	// TODO: add public depth value to set during parameterized sort method.
+	
+	public boolean getActivated() {
+		return activated;
+	}
+	
+	public int getDepth() {
+		return depth;
+	}
+	
+	public void setActivated(boolean activation) {
+		this.activated = activation;
+	}
+	
+	public void setDepth(int newDepth) {
+		this.depth = newDepth;
+	}
 
 }
