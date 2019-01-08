@@ -103,6 +103,18 @@ public class ConnectionGene implements Serializable {
 		Optional<ConnectionGene> match = genomes.parallelStream().map(g -> g.getConnectionGenes())
 				.flatMap(c -> c.values().parallelStream().filter(l -> l.inNode == inNode && l.outNode == outNode))
 				.findAny();
-		return match.orElse(this);
+		
+		if(match.isPresent()) {
+			if(!match.get().isExpressed()) {
+				match.get().enable();
+				return match.get();
+			}else {
+				return match.get();
+			}
+		}else {
+			return this;
+		}
+
+//		return match.orElse(this);
 	}
 }
