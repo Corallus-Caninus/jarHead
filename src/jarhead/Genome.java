@@ -3,14 +3,19 @@ package jarhead;
 import java.util.Collection;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Random;
 import java.util.Stack;
+import java.util.stream.Collectors;
 
 import jarhead.NodeGene.TYPE;
 
 import java.io.*;
+
+//TODO: Refactor, possibly into chromosome class for crossover mechanics. backup old network checking methods and cleanup
 
 /**
  * Main Genome class.
@@ -22,14 +27,14 @@ import java.io.*;
 
 public class Genome implements Serializable { // serializable allows classes to be written to disk and sent over IP/TCP
 												// for distributed systems. too slow. send input and output data over
-												// HTTP. send outputs after a minimum delay to buffer bias
-												// towards networked/distributed genomes
+												// IP/TCP. send outputs after a minimum delay to prevent bias
+												// against networked/distributed genomes
 	private static final long serialVersionUID = 129348938L;
 
 	private static List<Integer> tmpList1 = new ArrayList<Integer>(); // buffer list
 	private static List<Integer> tmpList2 = new ArrayList<Integer>();
 
-	private final float PROBABILITY_PERTURBING = 0.9f; // should this be passed in to mutation method from evaluator?
+	private final float PROBABILITY_PERTURBING = 0.9f;
 
 	private Map<Integer, ConnectionGene> connections; // Integer map key is equivalent to connection innovation
 	private Map<Integer, NodeGene> nodes; // Integer map key is equivalent to node innovation aka node ID
@@ -39,8 +44,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 	 */
 	public Genome() {
 		nodes = new HashMap<Integer, NodeGene>();
-		connections = new HashMap<Integer, ConnectionGene>();
-		// add global ID value and increment here.
+		connections = new HashMap<Integer, ConnectionGene>(); // why HashMap.
 	}
 
 	/**
@@ -114,24 +118,26 @@ public class Genome implements Serializable { // serializable allows classes to 
 	/**
 	 * Mutates a new connection gene with a random weight.
 	 * 
-	 * @param r           random seed.
-	 * @param innovation  counter object.
-	 * @param maxAttempts ends connections after this number.
+	 * @param r          random seed
+	 * @param innovation innovation counter for new connection
+	 * @param genomes    global gene pool for innovation number
 	 */
 	public void addConnectionMutation(Random r, Counter innovation, List<Genome> genomes) {
 		int tries = 0;
 		boolean success = false;
-		// maxAttempts = maxConnections() //maxConnections operates on connections.
-
-		List<Integer> inConnections = new ArrayList<Integer>();
-		List<Integer> outConnections = new ArrayList<Integer>();
 
 		Integer[] nodeInnovationNumbers = new Integer[nodes.keySet().size()];
 		nodes.keySet().toArray(nodeInnovationNumbers);
 
+		// TODO: Need to ensure same connection isnt
+		// attempted multiple times (to truly keep mutation consistent wrt
+		// maxConnections)
 		while (tries < this.maxConnections() && success == false) {
 			tries++;
 
+			// TODO: add memoization to this by storing random numbers that have been tried.
+			// and
+			// reducing length
 			Integer keyNode1 = nodeInnovationNumbers[r.nextInt(nodeInnovationNumbers.length)];
 			Integer keyNode2 = nodeInnovationNumbers[r.nextInt(nodeInnovationNumbers.length)];
 
@@ -166,38 +172,32 @@ public class Genome implements Serializable { // serializable allows classes to 
 					break;
 				}
 			}
-
+			// local check
 			if (connectionExists || connectionImpossible) {
-				continue; // this is fine as it makes sense to check locally before checking globally
+				continue;
 			}
 
 			ConnectionGene newCon = new ConnectionGene(reversed ? node2.getId() : node1.getId(),
-					reversed ? node1.getId() : node2.getId(), weight, true, innovation.getInnovation());
+					reversed ? node1.getId() : node2.getId(), weight, true, innovation.updateInnovation());
+
+			newCon = newCon.globalCheck(genomes, innovation);
 			connections.put(newCon.getInnovation(), newCon);
 
-			for (ConnectionGene hiddenConnection : connections.values()) {
-				if (hiddenConnection.isExpressed()) {
-					inConnections.add(hiddenConnection.getInNode());
-					outConnections.add(hiddenConnection.getInNode());
-				}
-			}
-
-			if (!FASTest(connections, nodes)) { // check local circularity
-				connections.remove(newCon.getInnovation()); // does this break innovation counter? Don't mistake
-															// con.getInnovation for count.getInnovation
+//			if (!fasTest(connections, nodes)) { // check local circularity
+			if (!this.sortDepth()) {
+				connections.remove(newCon.getInnovation());
+				innovation.resetInnovation();
+				this.sortDepth(); // resort
 				continue;
 			} else {
-				newCon.globalCheck(genomes); // call globalCheck here (to prevent checking all circularity conditions
-												// against global gene pool). this always returns a connection, should
-												// simply keep innovation consistent.
+				// global check
+				// call globalCheck here (to prevent checking all circularity
+				// conditions against global gene pool).
 				success = true;
 			}
 		}
 		if (success == false) {
 			System.out.println("DETECTED: maxAttempt reached, genome contains all possible connections!");
-			// TODO: implement Genome.maxConnections condition to allow a connection to be
-			// consistently added therefore keeping mutation rate consistent across large
-			// topologies (scaling).
 		}
 	}
 
@@ -212,30 +212,31 @@ public class Genome implements Serializable { // serializable allows classes to 
 	public void addNodeMutation(Random r, Counter connectionInnovation, Counter nodeInnovation, List<Genome> genomes) {
 		ConnectionGene con = (ConnectionGene) connections.values().toArray()[r.nextInt(connections.size())];
 		while (!con.isExpressed() || con.getInNode() == con.getOutNode()) {
-			System.out.println("ERROR: DISABLED/RECURRENT CONNECTION IN NODE MUTATION!!");
+			System.out.println("DETECTED: DISABLED/RECURRENT CONNECTION IN NODE MUTATION!");
 			con = (ConnectionGene) connections.values().toArray()[r.nextInt(connections.size())];
 		}
 
-//		System.out.println("ACCEPTABLE NODE MUTATION " + con.getInNode() + " " + con.getOutNode());
 		NodeGene inNode = nodes.get(con.getInNode());
 		NodeGene outNode = nodes.get(con.getOutNode());
 
 		con.disable(); // this is the only time innovations are disabled. didn't stanley implement
 						// chance to disable connection elsewhere?
 
-		NodeGene newNode = new NodeGene(TYPE.HIDDEN, nodeInnovation.getInnovation());
+		NodeGene newNode = new NodeGene(TYPE.HIDDEN, nodeInnovation.updateInnovation());
 
 		ConnectionGene inToNew = new ConnectionGene(inNode.getId(), newNode.getId(), 1f, true,
-				connectionInnovation.getInnovation());
+				connectionInnovation.updateInnovation());
 		ConnectionGene newToOut = new ConnectionGene(newNode.getId(), outNode.getId(), con.getWeight(), true,
-				connectionInnovation.getInnovation());
+				connectionInnovation.updateInnovation());
 
-		inToNew.globalCheck(genomes);
-		newToOut.globalCheck(genomes);
+		// cannot fail therefore no need to check sortDepth, but still need to call.
+		inToNew.globalCheck(genomes, connectionInnovation);
+		newToOut.globalCheck(genomes, connectionInnovation);
 
 		nodes.put(newNode.getId(), newNode);
 		connections.put(inToNew.getInnovation(), inToNew);
 		connections.put(newToOut.getInnovation(), newToOut);
+		this.sortDepth();
 	}
 
 	/**
@@ -245,9 +246,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 	 * Needs to consider case where genes have same fitness. The more fit parents
 	 * passes on excess and disjoint genes and matching genes are inherited
 	 * randomly. In the case of equal fitness, disjoint and excess genes are also
-	 * assigned randomly. this method loses the probability density function in the
-	 * case of equal fitness by randomizing every gene even if parent order is
-	 * randomized.
+	 * assigned randomly.
 	 * 
 	 * Uses random boolean to decide which disjoint genes are passed to child.
 	 * 
@@ -255,11 +254,11 @@ public class Genome implements Serializable { // serializable allows classes to 
 	 * @param parent2 Less fit parent.
 	 * @param r       random seed.
 	 */
-	public static Genome crossover(Genome parent1, Genome parent2, Random r) {
+	public static Genome crossover(Genome parent1, Genome parent2, Random r) { // TODO: add bool parameter for equal
+																				// fitness (random assignment of
+																				// disjoint and excess genes)
 		Genome child = new Genome();
-		List<Integer> inConnections = new ArrayList<Integer>();
-		List<Integer> outConnections = new ArrayList<Integer>();
-		boolean miscarriage = false;
+		boolean abort = false;
 
 		for (NodeGene parent1Node : parent1.getNodeGenes().values()) {
 			child.addNodeGene(new NodeGene(parent1Node)); // should we only inherit parent1 nodes? what about the more
@@ -267,17 +266,15 @@ public class Genome implements Serializable { // serializable allows classes to 
 		}
 
 		for (ConnectionGene parent1Node : parent1.getConnectionGenes().values()) {
-			if (parent2.getConnectionGenes().containsKey(parent1Node.getInnovation())) { // matching gene. remember
-																							// connectionGene's map int
-																							// key and innovation number
-																							// are the same.
+			if (parent2.getConnectionGenes().containsKey(parent1Node.getInnovation())) {
 				ConnectionGene childConGene = r.nextBoolean() ? new ConnectionGene(parent1Node)
 						: new ConnectionGene(parent2.getConnectionGenes().get(parent1Node.getInnovation()));
 				if (!childConGene.isExpressed()) {
 					if (r.nextBoolean()) {
 						childConGene.enable(); // add a random chance to enable as per stanely pg.109.
 					} // TODO: add probability variable as a hyperparameter.
-				}
+				} // "there is a preset chance that an inherited gene is disabled if it is
+					// disabled in either parent" Stanley p.109 : also need to disable
 
 				child.addConnectionGene(childConGene);
 
@@ -287,7 +284,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 				if (!childConGene.isExpressed()) {
 					if (r.nextBoolean()) {
 						childConGene.enable();
-					}
+					} // Same as above TODO but no need for disable chance as is disjoint/excess with
+						// no comparison
 				}
 
 				child.addConnectionGene(childConGene);
@@ -295,23 +293,20 @@ public class Genome implements Serializable { // serializable allows classes to 
 			}
 		}
 
-		for (ConnectionGene hiddenConnection : child.connections.values()) {
-			if (hiddenConnection.isExpressed()) {
-				inConnections.add(hiddenConnection.getInNode());
-				outConnections.add(hiddenConnection.getInNode());
-			}
-		}
-
-		if (!FASTest(child.connections, child.nodes)) {
-			miscarriage = true;
+//		if (!fasTest(child.connections, child.nodes)) {
+		if (!child.sortDepth()) {
+			abort = true;
 			System.out.println("ERROR IN CROSSOVER: FEEDBACK ARC SET");
 		}
 
-		if (!miscarriage) {
+		if (!abort) {
 			return child;
 		} else {
 			return parent1; // TODO: fix very bad solution. would prefer to recursively call crossover with
-							// new candidates.
+							// new candidates. Possibly call fasTest in child.connection addition. sometimes
+							// it is a random assignment; special case: disjoint/excess from p1
+//			System.out.println("Running Again");
+//			return crossover(parent1, parent2, r); //crossover sometimes never works. :D
 		}
 	}
 
@@ -534,8 +529,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 	// anyways? hanging nodes only exist due to crossover of disabled genes
 	// (fundamental to NEAT algorithm per stanely)
 
-	// TODO: use DFS instead of backwards propagation to find FAS. how can depth be
-	// assigned in this case? Is this still viable: Review this.
+	// Is this still viable: Review this.
 	/**
 	 * @deprecated
 	 * 
@@ -556,7 +550,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 	 * @return true if the connection is possible (input reached and no hanging
 	 *         input nodes nor feedback arc sets) else false.
 	 */
-	public static boolean ConnectionTest(Map<Integer, ConnectionGene> connections, Map<Integer, NodeGene> nodes,
+	public static boolean fasDFS(Map<Integer, ConnectionGene> connections, Map<Integer, NodeGene> nodes,
 			int checkNode) {
 
 		List<Integer> tmpInConnection = new ArrayList<Integer>();
@@ -608,13 +602,9 @@ public class Genome implements Serializable { // serializable allows classes to 
 	 * @return true if no Feedback Arc Set, hanging input node or hanging output
 	 *         node is found.
 	 */
-
-	// TODO: if using this method of checking, we should assign depth to nodes
-	// as well. each connection mutation has a chance to change depth assignment.
-	// Does this make DFS search a sub-optimal solution?
-
-	// static because doesnt use any class scope variables.
-	public static boolean FASTest(Map<Integer, ConnectionGene> connections, Map<Integer, NodeGene> nodes) {
+	// this should not be static connections and nodes are inherited values
+	// deprecated after sortDepth
+	public static boolean fasTest(Map<Integer, ConnectionGene> connections, Map<Integer, NodeGene> nodes) {
 		List<Integer> tmpInConnection = new ArrayList<Integer>();
 		List<Integer> tmpOutConnection = new ArrayList<Integer>();
 
@@ -622,25 +612,26 @@ public class Genome implements Serializable { // serializable allows classes to 
 		int val;
 		List<Integer> nodeSignals = new ArrayList<Integer>();
 
+		// SKIP UNEXPRESSED GENES
 		connections.forEach((l, p) -> {
-			if (p.isExpressed()) { // SKIP UNEXPRESSED GENES
+			if (p.isExpressed()) {
 				if (p.getInNode() != p.getOutNode()) { // remove recurrent connections.
 					tmpInConnection.add(p.getInNode());
 					tmpOutConnection.add(p.getOutNode());
 				}
 			}
 		});
+
 		nodes.forEach((k, o) -> {
 			if (o.getType() == NodeGene.TYPE.OUTPUT) {
 				nodeSignals.add(o.getId());
 			}
 		});
-
 		// TEST FOR HANGING NODES
 		for (NodeGene node : nodes.values()) {
 			if (node.getType() == NodeGene.TYPE.HIDDEN) {
 				if (!tmpInConnection.contains(node.getId()) || !tmpOutConnection.contains(node.getId())) {
-					System.out.print("DETECTED: HANGING INPUT/OUTPUT IN FASTEST");
+					System.out.println("DETECTED: HANGING INPUT/OUTPUT IN FASTEST");
 					return false;
 				}
 			}
@@ -648,7 +639,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 
 		// CHECK FOR FEEDBACK ARC SETS
 		while (!tmpInConnection.isEmpty() && !tmpOutConnection.isEmpty()) {
-			x++; // TODO: fix bad solution
+			x++; // fix bad solution
 
 			if (x > nodeSignals.size()) {
 				System.out.println("DETECTED: FEEDBACK ARC IN FASTEST");
@@ -685,16 +676,16 @@ public class Genome implements Serializable { // serializable allows classes to 
 		return true;
 	}
 
-	// will be implemented as a maxAttempt ceiling for tries in
-	// addConnectionMutation.
+	// TODO: ONLY WORKS IF UNIQUE CONNECTIONGENES ARE ATTEMPTED IN
+	// ADDCONNECTIONMUTATION add some form of memoization for mutation attempts
 	/**
 	 * Calculates the maximum number of connections possible for a given topology
 	 * (NodeGenes).
 	 * 
 	 * @return integer number of connections.
 	 */
-	public int maxConnections() { // CURRENTLY HERE
-		int hiddenNodes, inputNodes, outputNodes, boundaryNodes;
+	public int maxConnections() {
+		int hiddenNodes, inputNodes, outputNodes, boundaryConnections;
 		int prev = 0, next = 0;
 
 		hiddenNodes = (int) nodes.entrySet().parallelStream()
@@ -703,30 +694,99 @@ public class Genome implements Serializable { // serializable allows classes to 
 				.filter(p -> p.getValue().getType() == NodeGene.TYPE.OUTPUT).count();
 		inputNodes = (int) nodes.entrySet().parallelStream().filter(p -> p.getValue().getType() == NodeGene.TYPE.INPUT)
 				.count();
-		// first calculate possible connections with input and output nodes as they can
-		// only be connected one way.
-		boundaryNodes = inputNodes * (hiddenNodes + outputNodes) + hiddenNodes * outputNodes;
+		// first calculate possible connections with input and output (boundary) nodes
+		// as they can only be connected once for any respective pair.
+		boundaryConnections = inputNodes * (hiddenNodes + outputNodes) + hiddenNodes * outputNodes;
 		// all possible connections from boundary nodes
 
 //		System.out.println("Hidden Nodes: " + hiddenNodes);
-//		System.out.println("Potential boundary connections: " + boundaryNodes);
-		
-		if(hiddenNodes == 0) {
-			return boundaryNodes;
-		}else {
-			for(int i = 1; i <= hiddenNodes; i++) { 
-				next = prev + (i-1);
+//		System.out.println("Potential boundary connections: " + boundaryConnections);
+		if (hiddenNodes == 0) {
+			return boundaryConnections;
+		} else {
+			for (int i = 1; i <= hiddenNodes; i++) {
+				next = prev + (i - 1);
 				prev = next;
 			}
-			return next + boundaryNodes;
+			return next + boundaryConnections + hiddenNodes; // recurrent connections permissible
+			// for recursive but non circular connections:
+			// return next + boundaryConnections + hiddenNodes;
+			// for circular and recurrent connections:
+			// return hiddenNodes*hiddenNodes + hiddenNodes + boundaryConnections
 		}
-		/*
-		 * //(x==0) ? f(0) = 0 : f(x) = f(x-1) + (x-1) -> for A(n+)
-		 * 
-		 * int prev = 0, result = 0; for(int i = 1; i < hiddenNodes; i++) { result =
-		 * prev + (i-1); //if(i>0?) prev = result; }
-		 * 
-		 * return result + boundaryNodes;
-		 */
+	}
+
+	public boolean sortDepth() {
+		// how can previously established depth be used in
+		// addConnectionMutation? crossover?
+		List<ConnectionGene> buffer = new ArrayList<ConnectionGene>(connections.size());
+		Queue<ConnectionGene> connectionSignals = new LinkedList<ConnectionGene>();
+		LinkedList<Integer> nodeSignals = new LinkedList<>(); // set?
+		int depth = 0, process = 0;
+		ConnectionGene head;
+
+		// filter recurrent connections
+		buffer = connections.values().stream().filter(c -> c.getInNode() != c.getOutNode() && c.isExpressed())
+				.collect(Collectors.toList());
+
+		// check hanging inNodes
+		if (!buffer.stream().map(c -> c.getInNode()).collect(Collectors.toList())
+				.containsAll(nodes.values().stream()
+						.filter(n -> n.getType() == NodeGene.TYPE.HIDDEN || n.getType() == NodeGene.TYPE.INPUT)
+						.map(n -> n.getId()).collect(Collectors.toList()))) {
+			System.out.println("Innie");
+			return false;
+		}
+		// check hanging outNodes
+		if (!buffer.stream().map(c -> c.getOutNode()).collect(Collectors.toList())
+				.containsAll(nodes.values().stream()
+						.filter(n -> n.getType() == NodeGene.TYPE.HIDDEN || n.getType() == NodeGene.TYPE.OUTPUT)
+						.map(n -> n.getId()).collect(Collectors.toList()))) {
+			System.out.println("Outtie");
+			return false;
+		}
+
+		// initialize input nodeSignals and input connectionSignals
+		for (Integer a : nodes.values().stream().filter(n -> n.getType() == NodeGene.TYPE.INPUT).map(n -> n.getId())
+				.collect(Collectors.toList())) {
+			nodeSignals.push(a);
+		}
+		while (!nodeSignals.isEmpty()) {
+			int val = nodeSignals.pop();
+			connectionSignals
+					.addAll(buffer.stream().filter(c -> c.getInNode() == val).collect(Collectors.toList()));
+		}
+
+		// forward propagate the network
+		while (!buffer.isEmpty() && !connectionSignals.isEmpty()) {
+			while (!nodeSignals.isEmpty()) {
+				int val = nodeSignals.pop();
+				connectionSignals
+						.addAll(buffer.stream().filter(c -> c.getInNode() == val).collect(Collectors.toList()));
+			}
+			buffer.removeAll(connectionSignals);
+
+			// remove output signals.
+			connectionSignals.removeIf(c -> nodes.get(c.getOutNode()).getType() == NodeGene.TYPE.OUTPUT);
+
+			depth++;
+			process = connectionSignals.size();
+			head = connectionSignals.peek();
+			// get connectionSignals and process nodeSignals
+			for (int i = 0; i < process; i++) {
+
+				if (buffer.stream().anyMatch(c -> c.getOutNode() == connectionSignals.peek().getOutNode())) {
+					connectionSignals.add(connectionSignals.poll());
+					if (connectionSignals.peek().equals(head))
+						return false;
+				} else if (!nodeSignals.contains(connectionSignals.peek().getOutNode())) { // keep nodeSignals unique.
+					nodes.get(connectionSignals.peek().getOutNode()).setDepth(depth); // assign depth
+					nodeSignals.push(connectionSignals.poll().getOutNode()); // forward propagate
+				} else {
+					connectionSignals.poll(); // get rid of duplicates
+				}
+			}
+		}
+		return true;
 	}
 }
