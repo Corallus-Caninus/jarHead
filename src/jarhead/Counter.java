@@ -10,7 +10,10 @@ public class Counter implements Serializable {
 	private static final long serialVersionUID = 159348938L;
 	private int currentInnovation = 0;
 
-	public int getInnovation() {
+	public int updateInnovation() {
 		return currentInnovation++;
+	}
+	public void resetInnovation() { // ConnectionGene removal
+		currentInnovation--;
 	}
 }
