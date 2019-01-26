@@ -92,29 +92,34 @@ public class ConnectionGene implements Serializable {
 	 * global consistency of Connection innovation.
 	 * 
 	 * @param genomes List of all genomes to be compared against.
+	 * @param reset   TODO
 	 * @return matched connection gene if found else returns current connection
 	 *         gene.
 	 */
-	public ConnectionGene globalCheck(List<Genome> genomes) {
+
+	public ConnectionGene globalCheck(List<Genome> genomes, Counter connectionInnovation) {
 		// TODO: log number of parallel threads to verify parallelStream method works on
 		// this data structure type. verify Genomes and connectionGenes require
 		// parallelism and not one, the other or neither. How will this be called in
 		// practice?
+
+		// TODO: called 3 times in Genome. need to reset innovation counter when match
+		// is found.
+
 		Optional<ConnectionGene> match = genomes.parallelStream().map(g -> g.getConnectionGenes())
 				.flatMap(c -> c.values().parallelStream().filter(l -> l.inNode == inNode && l.outNode == outNode))
 				.findAny();
-		
-		if(match.isPresent()) {
-			if(!match.get().isExpressed()) {
+
+		if (match.isPresent()) {
+			// reset connection innovation if found since ConnectionGene constructor has
+			// updated the connectionInnovation counter
+			connectionInnovation.resetInnovation();
+			if (!match.get().isExpressed()) { // globalCheck always activates connectionGene
 				match.get().enable();
-				return match.get();
-			}else {
-				return match.get();
 			}
-		}else {
+			return match.get();
+		} else {
 			return this;
 		}
-
-//		return match.orElse(this);
 	}
 }
