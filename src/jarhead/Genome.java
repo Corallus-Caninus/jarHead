@@ -6,12 +6,13 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Random;
-import java.util.Stack;
 import java.util.stream.Collectors;
 
 import jarhead.NodeGene.TYPE;
+import jarhead.neat.NetworkPrinter;
 
 import java.io.*;
 
@@ -123,21 +124,27 @@ public class Genome implements Serializable { // serializable allows classes to 
 	 * @param genomes    global gene pool for innovation number
 	 */
 	public void addConnectionMutation(Random r, Counter innovation, List<Genome> genomes) {
+
+		genomes.remove(this);
 		int tries = 0;
 		boolean success = false;
 
 		Integer[] nodeInnovationNumbers = new Integer[nodes.keySet().size()];
 		nodes.keySet().toArray(nodeInnovationNumbers);
 
+		// TODO: Need to support multiple recurrent connections, consider refactoring
+		// when multiple recurrent connections are added. this may be best done with
+		// cyclic
+		// networks which can support this type of behavior wrt to NodeGene.activated()
+
 		// TODO: Need to ensure same connection isnt
 		// attempted multiple times (to truly keep mutation consistent wrt
 		// maxConnections)
-		while (tries < this.maxConnections() && success == false) {
+		// add memoization to this by storing random numbers/ConnectionGenes that have
+		// been tried.
+		while (tries < 4 * this.maxConnections() && success == false) {
 			tries++;
 
-			// TODO: add memoization to this by storing random numbers that have been tried.
-			// and
-			// reducing length
 			Integer keyNode1 = nodeInnovationNumbers[r.nextInt(nodeInnovationNumbers.length)];
 			Integer keyNode2 = nodeInnovationNumbers[r.nextInt(nodeInnovationNumbers.length)];
 
@@ -172,32 +179,44 @@ public class Genome implements Serializable { // serializable allows classes to 
 					break;
 				}
 			}
-			// local check
+			// local ConnectionGene check
 			if (connectionExists || connectionImpossible) {
 				continue;
 			}
 
 			ConnectionGene newCon = new ConnectionGene(reversed ? node2.getId() : node1.getId(),
-					reversed ? node1.getId() : node2.getId(), weight, true, innovation.updateInnovation());
+					reversed ? node1.getId() : node2.getId(), weight, true);
 
-			newCon = newCon.globalCheck(genomes, innovation);
-			connections.put(newCon.getInnovation(), newCon);
+			// global ConnectionGene check
+			// TODO: refactor globalCheck into ConnectionGene constructor and move
+			// connections.put
+			// directly before success = true;
+			if (newCon.globalCheck(genomes, innovation)) {
+				connections.put(newCon.getInnovation(), newCon);
 
-//			if (!fasTest(connections, nodes)) { // check local circularity
-			if (!this.sortDepth()) {
-				connections.remove(newCon.getInnovation());
-				innovation.resetInnovation();
-				this.sortDepth(); // resort
-				continue;
+				if (!this.sortDepth()) {
+					connections.remove(newCon.getInnovation());
+					this.sortDepth();
+				} else {
+					success = true;
+				}
 			} else {
-				// global check
-				// call globalCheck here (to prevent checking all circularity
-				// conditions against global gene pool).
-				success = true;
+				connections.put(newCon.getInnovation(), newCon);
+
+				if (!this.sortDepth()) {
+					connections.remove(newCon.getInnovation());
+					this.sortDepth();
+				} else {
+					success = true;
+				}
 			}
+
 		}
 		if (success == false) {
 			System.out.println("DETECTED: maxAttempt reached, genome contains all possible connections!");
+		}
+		if (!this.sortDepth()) {
+			System.out.println("BROKEN INSIDE CONNECTION MUTATION");
 		}
 	}
 
@@ -210,40 +229,82 @@ public class Genome implements Serializable { // serializable allows classes to 
 	 * @param nodeInnovation
 	 */
 	public void addNodeMutation(Random r, Counter connectionInnovation, Counter nodeInnovation, List<Genome> genomes) {
-		ConnectionGene con = (ConnectionGene) connections.values().toArray()[r.nextInt(connections.size())];
-		while (!con.isExpressed() || con.getInNode() == con.getOutNode()) {
-			System.out.println("DETECTED: DISABLED/RECURRENT CONNECTION IN NODE MUTATION!");
-			con = (ConnectionGene) connections.values().toArray()[r.nextInt(connections.size())];
+		genomes.remove(this);
+
+		ConnectionGene conSearch = (ConnectionGene) connections.values().toArray()[r.nextInt(connections.size())];
+		while (!conSearch.isExpressed() || conSearch.getInNode() == conSearch.getOutNode()) {
+			conSearch = (ConnectionGene) connections.values().toArray()[r.nextInt(connections.size())];
+		}
+		final ConnectionGene con = conSearch;
+
+		NodeGene inNode = nodes.get(conSearch.getInNode());
+		NodeGene outNode = nodes.get(conSearch.getOutNode());
+
+		con.disable(); // this is the only time innovations are disabled. stanley implements a chance
+						// to disable connection elsewhere?
+		List<ConnectionGene> ins;
+		List<ConnectionGene> outs;
+
+		NodeGene newNode;
+		ConnectionGene inToNew = null;
+		ConnectionGene newToOut = null;
+
+		// SCAN GENOMES//
+		for (Genome a : genomes) { // sequential genome scan may be slow but must ensure both connections are in
+									// the same topology
+			ins = a.getConnectionGenes().values().parallelStream()
+					.filter(c -> c.getInNode() == con.getInNode() && c.isExpressed() && c.getInNode() != c.getOutNode())
+					.collect(Collectors.toList());
+			outs = a.getConnectionGenes().values().parallelStream().filter(
+					c -> c.getOutNode() == con.getOutNode() && c.isExpressed() && c.getInNode() != c.getOutNode())
+					.collect(Collectors.toList());
+
+			for (ConnectionGene in : ins) {
+				Optional<ConnectionGene> match = outs.parallelStream().filter(o -> o.getInNode() == in.getOutNode())
+						.findAny();
+				if (match.isPresent() && !nodes.containsKey(in.getOutNode())) { // TODO: what exactly is going on here?
+					newToOut = new ConnectionGene(match.get());
+					inToNew = new ConnectionGene(in);
+					break; // break from genome scan
+				}
+			}
+			if (newToOut != null && inToNew != null) { // Unused code
+				break;
+			}
 		}
 
-		NodeGene inNode = nodes.get(con.getInNode());
-		NodeGene outNode = nodes.get(con.getOutNode());
+		if (inToNew != null) { // previous node exists in global genome
+			newNode = new NodeGene(TYPE.HIDDEN, inToNew.getOutNode());
+		} else { // this node is novel
+			newNode = new NodeGene(TYPE.HIDDEN, nodeInnovation.updateInnovation());
 
-		con.disable(); // this is the only time innovations are disabled. didn't stanley implement
-						// chance to disable connection elsewhere?
+			inToNew = new ConnectionGene(inNode.getId(), newNode.getId(), 1f, true);
+			inToNew.globalCheck(genomes, connectionInnovation); // should never find a match as node is novel
 
-		NodeGene newNode = new NodeGene(TYPE.HIDDEN, nodeInnovation.updateInnovation());
-
-		ConnectionGene inToNew = new ConnectionGene(inNode.getId(), newNode.getId(), 1f, true,
-				connectionInnovation.updateInnovation());
-		ConnectionGene newToOut = new ConnectionGene(newNode.getId(), outNode.getId(), con.getWeight(), true,
-				connectionInnovation.updateInnovation());
-
-		// cannot fail therefore no need to check sortDepth, but still need to call.
-		inToNew.globalCheck(genomes, connectionInnovation);
-		newToOut.globalCheck(genomes, connectionInnovation);
+			newToOut = new ConnectionGene(newNode.getId(), outNode.getId(), con.getWeight(), true);
+			newToOut.globalCheck(genomes, connectionInnovation);
+		}
 
 		nodes.put(newNode.getId(), newNode);
 		connections.put(inToNew.getInnovation(), inToNew);
 		connections.put(newToOut.getInnovation(), newToOut);
-		this.sortDepth();
+
+		if (!this.sortDepth()) {
+			System.out.println("\n\n IMPOSSIBLE \n\n");
+			System.out.println(this);
+
+			NetworkPrinter testing = new NetworkPrinter(this);
+			testing.displayGraph();
+
+			System.out.println("\n\n IMPOSSIBLE \n\n");
+		}
 	}
 
 	/**
 	 * Performs crossover using map.containsKey check of innovation number. (very
 	 * java friendly translation).
 	 * 
-	 * Needs to consider case where genes have same fitness. The more fit parents
+	 * Needs to consider case where genomes have same fitness. The more fit parents
 	 * passes on excess and disjoint genes and matching genes are inherited
 	 * randomly. In the case of equal fitness, disjoint and excess genes are also
 	 * assigned randomly.
@@ -258,7 +319,6 @@ public class Genome implements Serializable { // serializable allows classes to 
 																				// fitness (random assignment of
 																				// disjoint and excess genes)
 		Genome child = new Genome();
-		boolean abort = false;
 
 		for (NodeGene parent1Node : parent1.getNodeGenes().values()) {
 			child.addNodeGene(new NodeGene(parent1Node)); // should we only inherit parent1 nodes? what about the more
@@ -266,9 +326,17 @@ public class Genome implements Serializable { // serializable allows classes to 
 		}
 
 		for (ConnectionGene parent1Node : parent1.getConnectionGenes().values()) {
+
 			if (parent2.getConnectionGenes().containsKey(parent1Node.getInnovation())) {
 				ConnectionGene childConGene = r.nextBoolean() ? new ConnectionGene(parent1Node)
 						: new ConnectionGene(parent2.getConnectionGenes().get(parent1Node.getInnovation()));
+
+				if (!child.nodes.containsKey(childConGene.getOutNode()) // TODO: refactor this into above ternary
+																		// operator (&& with r.next?) is this a proper
+																		// way to perform crossover? rtfp
+						|| !child.nodes.containsKey(childConGene.getInNode()))
+					childConGene = new ConnectionGene(parent1Node);
+
 				if (!childConGene.isExpressed()) {
 					if (r.nextBoolean()) {
 						childConGene.enable(); // add a random chance to enable as per stanely pg.109.
@@ -281,6 +349,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 			} else { // disjoint or excess gene
 				ConnectionGene childConGene = new ConnectionGene(parent1Node); // didn't share innovation number
 																				// therefore excess or disjoint.
+
 				if (!childConGene.isExpressed()) {
 					if (r.nextBoolean()) {
 						childConGene.enable();
@@ -293,20 +362,10 @@ public class Genome implements Serializable { // serializable allows classes to 
 			}
 		}
 
-//		if (!fasTest(child.connections, child.nodes)) {
-		if (!child.sortDepth()) {
-			abort = true;
-			System.out.println("ERROR IN CROSSOVER: FEEDBACK ARC SET");
-		}
-
-		if (!abort) {
+		if (child.sortDepth()) { // TODO: can crossover ever yield hanging innie or outties?
 			return child;
 		} else {
-			return parent1; // TODO: fix very bad solution. would prefer to recursively call crossover with
-							// new candidates. Possibly call fasTest in child.connection addition. sometimes
-							// it is a random assignment; special case: disjoint/excess from p1
-//			System.out.println("Running Again");
-//			return crossover(parent1, parent2, r); //crossover sometimes never works. :D
+			return parent1;
 		}
 	}
 
@@ -520,162 +579,6 @@ public class Genome implements Serializable { // serializable allows classes to 
 		return list;
 	}
 
-	// should be able to find all Feedback Arc Set cases from
-	// output node(s). test speed for this method vs FASTest.
-
-	// Need to check every nodegene has input and output in
-	// nodeGeneMutation (can we do that here? instead? is it faster to check in the
-	// loop since we are performing DFS
-	// anyways? hanging nodes only exist due to crossover of disabled genes
-	// (fundamental to NEAT algorithm per stanely)
-
-	// Is this still viable: Review this.
-	/**
-	 * @deprecated
-	 * 
-	 * 			Tests Connections for feedback arc sets and hanging nodes (nodes
-	 *             with no connection to input which would break the current forward
-	 *             propagation algorithm). uses depth first search algorithm. not
-	 *             implemented as crossover/mutation isnt a bottleneck yet. (no need
-	 *             but here for future cases). Look to implement in
-	 *             connectionMutation.
-	 * 
-	 * @param connections current connection topology to be passed through
-	 * @param nodes       current nodes to find input nodes (hanging node
-	 *                    condition).
-	 * @param node1       currently N/A
-	 * @param node2       the outnode to backwards propagate from in DFS, looking
-	 *                    for inputs and checking for hanging node or feedback arc
-	 *                    set failure conditions.
-	 * @return true if the connection is possible (input reached and no hanging
-	 *         input nodes nor feedback arc sets) else false.
-	 */
-	public static boolean fasDFS(Map<Integer, ConnectionGene> connections, Map<Integer, NodeGene> nodes,
-			int checkNode) {
-
-		List<Integer> tmpInConnection = new ArrayList<Integer>();
-		List<Integer> tmpOutConnection = new ArrayList<Integer>();
-
-		Stack<Integer> searchStack = new Stack<Integer>();
-
-		connections.forEach((l, p) -> {
-			if (p.isExpressed()) {
-				if (!(p.getInNode() == p.getOutNode())) { // removes recurrent genes anyways.
-					tmpInConnection.add(p.getInNode());
-					tmpOutConnection.add(p.getOutNode());
-				}
-			}
-		});
-
-		searchStack.push(checkNode);
-
-		while (!(!tmpOutConnection.contains(checkNode) && searchStack.size() == 1)) {
-
-			if (!tmpOutConnection.contains(searchStack.peek())) {
-				searchStack.pop(); // exhausted all outConnections at given node and ready to go up.
-
-			} else {
-				int index = tmpOutConnection.indexOf(searchStack.peek());
-
-				if (searchStack.contains(tmpInConnection.get(index))) {
-					System.out.println("IN DFS ALG: FEEDBACK ARC CYCLE DETECTED");
-					return false;
-				}
-
-				searchStack.push(tmpInConnection.get(index));
-
-				tmpInConnection.remove(index);
-				tmpOutConnection.remove(index);
-			}
-		} // EOW
-		return true;
-	}
-
-	/**
-	 * Backward propagate network to look for feedback arc sets (because nodeSignals
-	 * wont grow as fast if outputs < inputs (typical ANN architecture)). Does an
-	 * initial topology check for hanging nodes (nodes that do not have an expressed
-	 * input or output connection) and disregards recurrent connections.
-	 * 
-	 * @param connections
-	 * @param nodes
-	 * @return true if no Feedback Arc Set, hanging input node or hanging output
-	 *         node is found.
-	 */
-	// this should not be static connections and nodes are inherited values
-	// deprecated after sortDepth
-	public static boolean fasTest(Map<Integer, ConnectionGene> connections, Map<Integer, NodeGene> nodes) {
-		List<Integer> tmpInConnection = new ArrayList<Integer>();
-		List<Integer> tmpOutConnection = new ArrayList<Integer>();
-
-		int x = 0;
-		int val;
-		List<Integer> nodeSignals = new ArrayList<Integer>();
-
-		// SKIP UNEXPRESSED GENES
-		connections.forEach((l, p) -> {
-			if (p.isExpressed()) {
-				if (p.getInNode() != p.getOutNode()) { // remove recurrent connections.
-					tmpInConnection.add(p.getInNode());
-					tmpOutConnection.add(p.getOutNode());
-				}
-			}
-		});
-
-		nodes.forEach((k, o) -> {
-			if (o.getType() == NodeGene.TYPE.OUTPUT) {
-				nodeSignals.add(o.getId());
-			}
-		});
-		// TEST FOR HANGING NODES
-		for (NodeGene node : nodes.values()) {
-			if (node.getType() == NodeGene.TYPE.HIDDEN) {
-				if (!tmpInConnection.contains(node.getId()) || !tmpOutConnection.contains(node.getId())) {
-					System.out.println("DETECTED: HANGING INPUT/OUTPUT IN FASTEST");
-					return false;
-				}
-			}
-		}
-
-		// CHECK FOR FEEDBACK ARC SETS
-		while (!tmpInConnection.isEmpty() && !tmpOutConnection.isEmpty()) {
-			x++; // fix bad solution
-
-			if (x > nodeSignals.size()) {
-				System.out.println("DETECTED: FEEDBACK ARC IN FASTEST");
-				return false;
-			}
-			for (int i = 0; i < nodeSignals.size(); i++) {
-				if (tmpInConnection.contains(nodeSignals.get(i))) {
-					continue;
-				} else {
-					x = 0;
-					val = nodeSignals.remove(i);
-
-					while (tmpOutConnection.contains(val)) {
-						int j = tmpOutConnection.indexOf(val);
-
-						nodeSignals.add(tmpInConnection.remove(j));
-						tmpOutConnection.remove(j);
-					}
-
-					for (int k = 0; k < nodeSignals.size(); k++) {
-						Integer vals = nodeSignals.get(k);
-						for (int m = k + 1; m < nodeSignals.size(); m++) {
-							if (vals.equals(nodeSignals.get(m))) {
-								nodeSignals.remove(m);
-								k = 0; // TODO: fix initial condition so this can be k--
-							}
-						}
-					}
-					// end of squisherLite
-				}
-			}
-
-		}
-		return true;
-	}
-
 	// TODO: ONLY WORKS IF UNIQUE CONNECTIONGENES ARE ATTEMPTED IN
 	// ADDCONNECTIONMUTATION add some form of memoization for mutation attempts
 	/**
@@ -695,12 +598,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 		inputNodes = (int) nodes.entrySet().parallelStream().filter(p -> p.getValue().getType() == NodeGene.TYPE.INPUT)
 				.count();
 		// first calculate possible connections with input and output (boundary) nodes
-		// as they can only be connected once for any respective pair.
 		boundaryConnections = inputNodes * (hiddenNodes + outputNodes) + hiddenNodes * outputNodes;
-		// all possible connections from boundary nodes
 
-//		System.out.println("Hidden Nodes: " + hiddenNodes);
-//		System.out.println("Potential boundary connections: " + boundaryConnections);
 		if (hiddenNodes == 0) {
 			return boundaryConnections;
 		} else {
@@ -717,75 +616,59 @@ public class Genome implements Serializable { // serializable allows classes to 
 	}
 
 	public boolean sortDepth() {
-		// how can previously established depth be used in
-		// addConnectionMutation? crossover?
 		List<ConnectionGene> buffer = new ArrayList<ConnectionGene>(connections.size());
-		Queue<ConnectionGene> connectionSignals = new LinkedList<ConnectionGene>();
-		LinkedList<Integer> nodeSignals = new LinkedList<>(); // set?
-		int depth = 0, process = 0;
-		ConnectionGene head;
+		Queue<ConnectionGene> connectionSignals = new LinkedList<ConnectionGene>(); // expanding ring buffer
+
+		nodes.forEach((i, n) -> {
+			n.setDepth(0);
+		});
 
 		// filter recurrent connections
-		buffer = connections.values().stream().filter(c -> c.getInNode() != c.getOutNode() && c.isExpressed())
+		buffer = connections.values().parallelStream().filter(c -> c.getInNode() != c.getOutNode() && c.isExpressed())
 				.collect(Collectors.toList());
 
 		// check hanging inNodes
-		if (!buffer.stream().map(c -> c.getInNode()).collect(Collectors.toList())
-				.containsAll(nodes.values().stream()
+		if (!buffer.parallelStream().map(c -> c.getInNode()).collect(Collectors.toList())
+				.containsAll(nodes.values().parallelStream()
 						.filter(n -> n.getType() == NodeGene.TYPE.HIDDEN || n.getType() == NodeGene.TYPE.INPUT)
 						.map(n -> n.getId()).collect(Collectors.toList()))) {
 			System.out.println("Innie");
 			return false;
 		}
 		// check hanging outNodes
-		if (!buffer.stream().map(c -> c.getOutNode()).collect(Collectors.toList())
-				.containsAll(nodes.values().stream()
+		if (!buffer.parallelStream().map(c -> c.getOutNode()).collect(Collectors.toList())
+				.containsAll(nodes.values().parallelStream()
 						.filter(n -> n.getType() == NodeGene.TYPE.HIDDEN || n.getType() == NodeGene.TYPE.OUTPUT)
 						.map(n -> n.getId()).collect(Collectors.toList()))) {
 			System.out.println("Outtie");
 			return false;
 		}
 
-		// initialize input nodeSignals and input connectionSignals
-		for (Integer a : nodes.values().stream().filter(n -> n.getType() == NodeGene.TYPE.INPUT).map(n -> n.getId())
+		// BEGING SORTDEPTH
+		// initialize input connectionSignals
+		for (int c : nodes.values().parallelStream().filter(n -> n.getType() == NodeGene.TYPE.INPUT).map(n -> n.getId())
 				.collect(Collectors.toList())) {
-			nodeSignals.push(a);
-		}
-		while (!nodeSignals.isEmpty()) {
-			int val = nodeSignals.pop();
 			connectionSignals
-					.addAll(buffer.stream().filter(c -> c.getInNode() == val).collect(Collectors.toList()));
+					.addAll(buffer.parallelStream().filter(g -> g.getInNode() == c).collect(Collectors.toList()));
 		}
-
-		// forward propagate the network
-		while (!buffer.isEmpty() && !connectionSignals.isEmpty()) {
-			while (!nodeSignals.isEmpty()) {
-				int val = nodeSignals.pop();
-				connectionSignals
-						.addAll(buffer.stream().filter(c -> c.getInNode() == val).collect(Collectors.toList()));
+		for (int depth = 1; !buffer.isEmpty(); depth++) {
+			if (connectionSignals.isEmpty()) {
+				return false; // circularity
 			}
+
+			// remove all connectionSignals from buffer and clear connectionSignals
 			buffer.removeAll(connectionSignals);
+			connectionSignals.clear();
 
-			// remove output signals.
-			connectionSignals.removeIf(c -> nodes.get(c.getOutNode()).getType() == NodeGene.TYPE.OUTPUT);
+			// step forward one depth in network
+			List<Integer> match = buffer.parallelStream().map(m -> m.getOutNode()).collect(Collectors.toList());
+			connectionSignals.addAll(
+					buffer.parallelStream().filter(c -> !match.contains(c.getInNode())).collect(Collectors.toList()));
 
-			depth++;
-			process = connectionSignals.size();
-			head = connectionSignals.peek();
-			// get connectionSignals and process nodeSignals
-			for (int i = 0; i < process; i++) {
-
-				if (buffer.stream().anyMatch(c -> c.getOutNode() == connectionSignals.peek().getOutNode())) {
-					connectionSignals.add(connectionSignals.poll());
-					if (connectionSignals.peek().equals(head))
-						return false;
-				} else if (!nodeSignals.contains(connectionSignals.peek().getOutNode())) { // keep nodeSignals unique.
-					nodes.get(connectionSignals.peek().getOutNode()).setDepth(depth); // assign depth
-					nodeSignals.push(connectionSignals.poll().getOutNode()); // forward propagate
-				} else {
-					connectionSignals.poll(); // get rid of duplicates
-				}
+			for (ConnectionGene a : connectionSignals) {
+				nodes.get(a.getInNode()).setDepth(depth);
 			}
+
 		}
 		return true;
 	}

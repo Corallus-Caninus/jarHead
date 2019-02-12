@@ -2,6 +2,8 @@ package jarhead.neat;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
+import java.util.stream.Collectors;
 
 import jarhead.ConnectionGene;
 import jarhead.Counter;
@@ -17,7 +19,6 @@ import java.io.*;
  * Tests a simple evaluator that runs for 100 generations, and scores fitness
  * based on the amount of connections in the network.
  * 
- * @author hydrozoa
  */
 public class TestNEAT {
 
@@ -31,14 +32,15 @@ public class TestNEAT {
 		Genome parent2 = new Genome(); // make sure to get innovation correct. do missing innovation numbers allow for
 										// void crossover/mutations?
 
-		int n1 = nodeInnovation.getInnovation();
-		int n2 = nodeInnovation.getInnovation();
-		int n3 = nodeInnovation.getInnovation();
-		int n4 = nodeInnovation.getInnovation();
-		int n5 = nodeInnovation.getInnovation();
+		int n1 = nodeInnovation.updateInnovation();
+		int n2 = nodeInnovation.updateInnovation();
+		int n3 = nodeInnovation.updateInnovation();
+		int n4 = nodeInnovation.updateInnovation();
+		int n5 = nodeInnovation.updateInnovation();
 
-//		int n6 = nodeInnovation.getInnovation();
-//		int n7 = nodeInnovation.getInnovation();
+//		int n6 = nodeInnovation.updateInnovation();
+//		int n7 = nodeInnovation.updateInnovation();
+//		int n8 = parent2.nodeInnovation.updateInnovation();
 
 		NodeGene node1 = new NodeGene(TYPE.INPUT, n1);
 		NodeGene node2 = new NodeGene(TYPE.INPUT, n2);
@@ -48,6 +50,7 @@ public class TestNEAT {
 
 //		NodeGene node6 = new NodeGene(TYPE.HIDDEN, n6);
 //		NodeGene node7 = new NodeGene(TYPE.HIDDEN, n7);
+//		NodeGene node8 = new NodeGene(TYPE.HIDDEN, n8);
 
 		parent2.addNodeGene(node1);
 		parent2.addNodeGene(node2);
@@ -57,14 +60,23 @@ public class TestNEAT {
 
 //		parent2.addNodeGene(node6);
 //		parent2.addNodeGene(node7);
+//		parent2.addNodeGene(node8);
 
-		int c1 = connectionInnovation.getInnovation();
-		int c2 = connectionInnovation.getInnovation();
-		int c3 = connectionInnovation.getInnovation();
-		int c4 = connectionInnovation.getInnovation();
-		int c5 = connectionInnovation.getInnovation();
-		int c6 = connectionInnovation.getInnovation();
+		int c1 = connectionInnovation.updateInnovation();
+		int c2 = connectionInnovation.updateInnovation();
+		int c3 = connectionInnovation.updateInnovation();
+		int c4 = connectionInnovation.updateInnovation();
+		int c5 = connectionInnovation.updateInnovation();
+		int c6 = connectionInnovation.updateInnovation();
 
+//		int c7 = connectionInnovation.updateInnovation();
+//		int c8 = connectionInnovation.updateInnovation();
+//		int c9 = connectionInnovation.updateInnovation();
+
+//		int c10 = connectionInnovation.updateInnovation();
+//		int c11 = connectionInnovation.updateInnovation();
+//		int c12 = connectionInnovation.updateInnovation();
+		// node innovation n1 == nodeId 0
 		parent2.addConnectionGene(new ConnectionGene(n1, n3, 0.5f, true, c1));
 		parent2.addConnectionGene(new ConnectionGene(n1, n4, 0.5f, true, c5));
 		parent2.addConnectionGene(new ConnectionGene(n1, n5, 0.5f, true, c2));
@@ -72,17 +84,50 @@ public class TestNEAT {
 		parent2.addConnectionGene(new ConnectionGene(n2, n4, 0.5f, true, c3));
 		parent2.addConnectionGene(new ConnectionGene(n2, n5, 0.5f, true, c4));
 
-//		for debugging:		
-//		eval.getFittestGenome().maxConnections();
-//		System.exit(0);
+//		parent2.addConnectionGene(new ConnectionGene(n2, n6, 0.5f, true, c7));
+//		parent2.addConnectionGene(new ConnectionGene(n6, n7, 0.5f, true, c8));
 
-		writeGenome(parent2, "startGenome");
+//		parent2.addConnectionGene(new ConnectionGene(n7, n5, 0.5f, true, c9));
+//		parent2.addConnectionGene(new ConnectionGene(n7, n6, 0.5f, true, c10));
+		// test recurrent
+
+		if (parent2.sortDepth()) { // TODO: Implement, verify and check it in
+			System.out.println("Successful sort");
+			parent2.getNodeGenes().forEach((i, n) -> {
+				System.out.println("Printing Node: " + i);
+				System.out.println("Depth: " + n.getDepth());
+			});
+		} else {
+			System.out.println("ERROR: hanging node or circularity!");
+			System.exit(0);
+		}
+
+//		// mutate genome prior to crossover
+//		Random r = new Random();
+//		List<Genome> genomes = new ArrayList<>();
+//		genomes.add(parent2);
+//		for (int i = 0; i < 200; i++) {
+//			if (r.nextFloat() > 0.90) {
+//				parent2.addNodeMutation(r, connectionInnovation, nodeInnovation, genomes);
+//			}
+//			parent2.addConnectionMutation(r, connectionInnovation, genomes);
+//			parent2.addConnectionMutation(r, connectionInnovation, genomes);
+//			System.out.println(i);
+//		}
+//		
+//		if (!parent2.sortDepth()) {
+//			System.out.println("FAILURE");
+//		} else {
+//			NetworkPrinter testing = new NetworkPrinter(parent2);
+//			testing.displayGraph();
+//		}
+
+		writeGenome(parent2, "startGenome"); // testing serializable object
 		writeCounter(connectionInnovation, "lastConnectionInnovation");
 		writeCounter(nodeInnovation, "lastNodeInnovation");
 
 		// overrides evaluation function (fitness function) to get highest weight sum
-		// (check hydroneat).
-		Evaluator eval = new Evaluator(100, parent2, nodeInnovation, connectionInnovation) {
+		Evaluator eval = new Evaluator(10, parent2, connectionInnovation, nodeInnovation) {
 			@Override
 			protected float evaluateGenome(Genome evalGenome) {
 				float weightSum = 0f;
@@ -95,7 +140,7 @@ public class TestNEAT {
 			}
 		};
 
-		for (int i = 0; i < 100; i++) {
+		for (int i = 0; i < 300; i++) {
 			eval.evaluate();
 			System.out.print("Generation: " + i);
 			System.out.print("\tHighest fitness: " + eval.getHighestFitness());
@@ -111,15 +156,33 @@ public class TestNEAT {
 			}
 			System.out.print("\tWeight sum: " + weightSum);
 			System.out.print("\n");
-		} // was below
+			System.out.println("Highest innovation number: "
+					+ eval.getFittestGenome().getConnectionGenes().values().stream().map(c -> c.getInnovation())
+							.sorted((a, b) -> b.compareTo(a)).collect(Collectors.toList()).get(0));
+		}
+		//
 
-		
+		Genome tester = eval.getFittestGenome();
+		NetworkPrinter testing = new NetworkPrinter(tester);
+		if (tester.sortDepth()) {
+			System.out.println("Successful sort");
+			tester.getNodeGenes().forEach((i, n) -> {
+				System.out.println("Printing Node: " + i);
+				System.out.println("Depth: " + n.getDepth());
+			});
+			testing.displayGraph();
+		} else {
+			System.out.println("ERROR: hanging node or circularity!");
+
+			testing.displayGraph();
+		}
+
 		List<Float> sensors = new ArrayList<Float>();
 		sensors.add(1f);
 		sensors.add(2f); // now network.run(sensors);
 
-		Network network = new Network(eval.getFittestGenome());// complete. pass only fittest genome since that SEEMS to
-																// be the only one passed
+		Network network = new Network(eval.getFittestGenome());
+
 //		network.setup(eval.getFittestGenome());
 		System.out.println(sensors);
 		network.run(sensors); // TODO: make network immutable. use stream method in network.
