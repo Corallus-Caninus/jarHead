@@ -42,7 +42,7 @@ public class NetworkPrinter {
 	        		"text-background-color: black;" +
 	        		"text-alignment: center;" +
 	        		"text-color: black;" +
-	        		"size: 10;" +
+	        		"size: 20;" +
 	        		"text-size: 10;" +
 	        "}" +
 	        
@@ -132,7 +132,6 @@ public class NetworkPrinter {
 				e.addAttribute("ui.class", "inactive");
 			}
 		}
-		
 	}
 
 	public void displayGraph() {

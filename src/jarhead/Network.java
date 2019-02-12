@@ -6,13 +6,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * iterates through network performing forward propogation.
+ * iterates through network performing forward propagation.
  * 
  * @author ElectricIsotope
  *
  */
 
-//TODO: PRIMARY: Rewrite with streams. everything here should be java 8 immutable method (setup is overrated. sorting to depth will suffice).
+//TODO: PRIMARY: Rewrite with streams? everything here should be (java 8?) 
+// immutable method (setup is overrated. sorting to depth will suffice).
 
 //TODO: REFACTOR
 public class Network {
@@ -64,7 +65,6 @@ public class Network {
 		});
 	}
 
-
 	// TODO: make all infinite loops finite. fix squisher algorithm. fix static data
 	// structure divergence in setup vs. run.
 
@@ -84,7 +84,6 @@ public class Network {
 		// TEMPORARY DATA STRUCTURES
 
 		Map<Integer, Float> recurrentPositions = new HashMap<Integer, Float>(srecurrentPositions); // TODO: replace
-																									// static
 																									// assignments with
 																									// stream methods
 		List<Integer> ingene = new ArrayList<Integer>(singene);
@@ -92,7 +91,7 @@ public class Network {
 		List<Float> checkWeight = new ArrayList<Float>(scheckWeight);
 
 		List<Integer> outputs = new ArrayList<Integer>(soutputs);
-		List<Integer> inputs = new ArrayList<Integer>(sinputs); // not clearing old lists...
+		List<Integer> inputs = new ArrayList<Integer>(sinputs);
 
 		List<Float> connectionSignals = new ArrayList<Float>(); // runtime data structures
 		List<Integer> nodeSignals = new ArrayList<Integer>();

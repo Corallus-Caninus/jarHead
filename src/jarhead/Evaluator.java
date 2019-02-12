@@ -17,8 +17,8 @@ public abstract class Evaluator {
 
 	private FitnessGenomeComparator fitComp = new FitnessGenomeComparator();
 
-	private Counter nodeInnovation;
 	private Counter connectionInnovation;
+	private Counter nodeInnovation; 
 
 	private Random random = new Random();
 
@@ -28,9 +28,9 @@ public abstract class Evaluator {
 	private float C3 = 0.4f;
 	private float DT = 10.0f;
 	private float MUTATION_RATE = 0.5f;
-//	private float ADD_CONNECTION_RATE = 0.1f;
-	private float ADD_CONNECTION_RATE = 0.05f;
-	private float ADD_NODE_RATE = 0.1f;
+	private float ADD_CONNECTION_RATE = 0.7f;
+//	private float ADD_CONNECTION_RATE = 0.05f;
+	private float ADD_NODE_RATE = 0.01f;
 
 	private int populationSize;
 
@@ -56,10 +56,12 @@ public abstract class Evaluator {
 	 *                             nodeInnovation but used for fitness comparison.
 	 * @see https://groups.yahoo.com/neo/groups/neat/conversations/messages/6707
 	 */
-	public Evaluator(int populationSize, Genome startingGenome, Counter nodeInnovation, Counter connectionInnovation) {
+	public Evaluator(int populationSize, Genome startingGenome, Counter connectionInnovation, Counter nodeInnovation) {
 		this.populationSize = populationSize;
+		this.connectionInnovation = connectionInnovation; // TODO: this should be its own object to prevent lost genomes
+															// from exploding innovation (not critical)
 		this.nodeInnovation = nodeInnovation;
-		this.connectionInnovation = connectionInnovation;
+		
 		genomes = new ArrayList<Genome>(populationSize);
 		for (int i = 0; i < populationSize; i++) {
 			genomes.add(new Genome(startingGenome));
@@ -136,7 +138,6 @@ public abstract class Evaluator {
 
 		// put best genomes from each species directly into next generation
 		// is this (fittestInSpecies) explicit fitness sharing from k.stanely?
-		// TODO: write as java 8 stream
 		for (Species s : species) {
 			Collections.sort(s.fitnessPop, fitComp);
 			Collections.reverse(s.fitnessPop);
@@ -152,9 +153,9 @@ public abstract class Evaluator {
 			Genome p2 = getRandomGenomeBiasedAdjustedFitness(s, random);
 
 			Genome child;
-			if (scoreMap.get(p1) >= scoreMap.get(p2)) { // this needs to be greater than exclusively as per k.stanley.
-				child = Genome.crossover(p1, p2, random); // always give node topology to higher fitness parent
-			} else {
+			if (scoreMap.get(p1) >= scoreMap.get(p2)) { 
+				child = Genome.crossover(p1, p2, random); //TODO: need to handle when child is not possible. 
+			} else {									 // Is this due to innovation number?
 				child = Genome.crossover(p2, p1, random);
 			} // else they are equal so disjoint and excess genes must be randomized
 				// respectively not between parents.
@@ -173,10 +174,7 @@ public abstract class Evaluator {
 		}
 
 		genomes = nextGenGenomes;
-		nextGenGenomes = new ArrayList<Genome>();// TODO: Innovation numbers are lost here. does K.Stanley ever lose
-													// innovations count? should connections be separate from genomes?
-													// if separate, why not use a static LUT?? Doesnt effect crossover
-													// therefore not critical.
+		nextGenGenomes = new ArrayList<Genome>();
 	}
 
 	// where is explicit fitness sharing executed?
