@@ -34,6 +34,22 @@ public class ConnectionGene implements Serializable {
 	}
 
 	/**
+	 * Construct a new connection gene without innovation
+	 * 
+	 * @param inNode
+	 * @param outNode
+	 * @param weight
+	 * @param expressed
+	 */
+	public ConnectionGene(int inNode, int outNode, float weight, boolean expressed) {
+		this.inNode = inNode;
+		this.outNode = outNode;
+		this.weight = weight;
+		this.expressed = expressed;
+		// TODO: default innovation value
+	}
+
+	/**
 	 * Inherits a connection gene.
 	 * 
 	 * @param con Connection gene to be copied
@@ -91,35 +107,30 @@ public class ConnectionGene implements Serializable {
 	 * Checks this connection against all connections in a Gene pool. Used for
 	 * global consistency of Connection innovation.
 	 * 
-	 * @param genomes List of all genomes to be compared against.
-	 * @param reset   TODO
-	 * @return matched connection gene if found else returns current connection
-	 *         gene.
+	 * @param genomes              List of all genomes to be compared against.
+	 * @param connectionInnovation Counter for innovation number
+	 * @return True if innovation is matched and assigned
 	 */
 
-	public ConnectionGene globalCheck(List<Genome> genomes, Counter connectionInnovation) {
-		// TODO: log number of parallel threads to verify parallelStream method works on
-		// this data structure type. verify Genomes and connectionGenes require
-		// parallelism and not one, the other or neither. How will this be called in
-		// practice?
-
-		// TODO: called 3 times in Genome. need to reset innovation counter when match
-		// is found.
+	public boolean globalCheck(List<Genome> genomes, Counter connectionInnovation) {
+		// TODO: move this method into constructor or add back to Genome
+		// addConnectionMutation method (proper oop solution). prefer to move as much
+		// innovation related code into this method (genome is bloated and becoming
+		// imperative)
 
 		Optional<ConnectionGene> match = genomes.parallelStream().map(g -> g.getConnectionGenes())
 				.flatMap(c -> c.values().parallelStream().filter(l -> l.inNode == inNode && l.outNode == outNode))
 				.findAny();
 
+		// need to add condition for recurrent connections, cyclic will appear as normal
+		// connections wrt this method.
+
 		if (match.isPresent()) {
-			// reset connection innovation if found since ConnectionGene constructor has
-			// updated the connectionInnovation counter
-			connectionInnovation.resetInnovation();
-			if (!match.get().isExpressed()) { // globalCheck always activates connectionGene
-				match.get().enable();
-			}
-			return match.get();
-		} else {
-			return this;
+			this.innovation = match.get().innovation; // TODO: reset innovation etc. within this method. WIP
+			return true;
+		} else { // novel connection
+			this.innovation = connectionInnovation.updateInnovation();
+			return false;
 		}
 	}
 }

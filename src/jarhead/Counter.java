@@ -13,7 +13,10 @@ public class Counter implements Serializable {
 	public int updateInnovation() {
 		return currentInnovation++;
 	}
-	public void resetInnovation() { // ConnectionGene removal
-		currentInnovation--;
+	public int resetInnovation() { // ConnectionGene removal
+		return currentInnovation--;
+	}
+	public int getInnovation() {
+		return currentInnovation;
 	}
 }

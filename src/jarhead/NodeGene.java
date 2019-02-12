@@ -1,6 +1,9 @@
 package jarhead;
 
 import java.io.*;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 //where is the activation function?
 /**
@@ -19,20 +22,19 @@ public class NodeGene implements Serializable {
 	// added bool activated to allow gate keeping of recurrent (and in
 	// the future cyclic) signals during forward prop.
 	private boolean activated;
-	private int depth; 
-	
+	private int depth = 0;
+
 	/**
 	 * Constructs a new Node Gene
 	 * 
 	 * @param type Input, Hidden or Output.
-	 * @param id   id number. equivalent to innovation number for node gene but not
-	 *             necessary for compatibility distance function.
+	 * @param id   id number. Innovation number for node gene but not necessary for
+	 *             compatibility distance function.
 	 */
 	public NodeGene(TYPE type, int id/* , float activation */) {
 		this.type = type;
 		this.id = id;
 		activated = false;
-		depth = 0;
 //		this.activation = activation;//*sigmoid activation function*. Just a thought does this need to be in connectiongene?
 	}
 
@@ -54,19 +56,19 @@ public class NodeGene implements Serializable {
 	public int getId() {
 		return id;
 	}
-	
+
 	public boolean getActivated() {
 		return activated;
 	}
-	
+
 	public int getDepth() {
 		return depth;
 	}
-	
+
 	public void setActivated(boolean activation) {
 		this.activated = activation;
 	}
-	
+
 	public void setDepth(int newDepth) {
 		this.depth = newDepth;
 	}
