@@ -102,32 +102,12 @@ public class TestNEAT {
 			System.exit(0);
 		}
 
-//		// mutate genome prior to crossover
-//		Random r = new Random();
-//		List<Genome> genomes = new ArrayList<>();
-//		genomes.add(parent2);
-//		for (int i = 0; i < 200; i++) {
-//			if (r.nextFloat() > 0.90) {
-//				parent2.addNodeMutation(r, connectionInnovation, nodeInnovation, genomes);
-//			}
-//			parent2.addConnectionMutation(r, connectionInnovation, genomes);
-//			parent2.addConnectionMutation(r, connectionInnovation, genomes);
-//			System.out.println(i);
-//		}
-//		
-//		if (!parent2.sortDepth()) {
-//			System.out.println("FAILURE");
-//		} else {
-//			NetworkPrinter testing = new NetworkPrinter(parent2);
-//			testing.displayGraph();
-//		}
-
 		writeGenome(parent2, "startGenome"); // testing serializable object
 		writeCounter(connectionInnovation, "lastConnectionInnovation");
 		writeCounter(nodeInnovation, "lastNodeInnovation");
 
 		// overrides evaluation function (fitness function) to get highest weight sum
-		Evaluator eval = new Evaluator(10, parent2, connectionInnovation, nodeInnovation) {
+		Evaluator eval = new Evaluator(500, parent2, connectionInnovation, nodeInnovation) {
 			@Override
 			protected float evaluateGenome(Genome evalGenome) {
 				float weightSum = 0f;
@@ -140,7 +120,7 @@ public class TestNEAT {
 			}
 		};
 
-		for (int i = 0; i < 300; i++) {
+		for (int i = 0; i < 200; i++) {
 			eval.evaluate();
 			System.out.print("Generation: " + i);
 			System.out.print("\tHighest fitness: " + eval.getHighestFitness());

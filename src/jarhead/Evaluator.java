@@ -8,7 +8,9 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
+import java.util.stream.Collectors;
 
 /**
  * Evaluator class.
@@ -92,20 +94,17 @@ public abstract class Evaluator {
 		fittestGenome = null;
 
 		// Place genomes into species
-		System.out.println("Placing genomes into species..");
+		System.out.println("Placing genomes into species.."); // This is bottleneck
+
+		// WIP replacing below compatibility method
 		for (Genome g : genomes) {
-			boolean foundSpecies = false;
-			for (Species s : species) {
-				if (Genome.compatibilityDistance(g, s.mascot, C1, C2, C3) < DT) { // compatibility distance is less than
-																					// DT, so genome belongs to this
-																					// species
-					s.members.add(g);
-					mappedSpecies.put(g, s);
-					foundSpecies = true;
-					break;
-				}
-			}
-			if (!foundSpecies) { // if there is no appropriate species for genome, make a new one
+			Optional<Species> match = species.parallelStream()
+					.filter(s -> Genome.compatibilityDistance(g, s.mascot, C1, C2, C3) < DT).findAny();
+
+			if(match.isPresent()) {
+				match.get().members.add(g);
+				mappedSpecies.put(g, match.get());
+			}else {
 				Species newSpecies = new Species(g);
 				species.add(newSpecies);
 				mappedSpecies.put(g, newSpecies);
@@ -174,7 +173,7 @@ public abstract class Evaluator {
 			}
 			nextGenGenomes.add(child);
 			// TODO: need to "garbage collect" fragmented innovation numbers lost with
-			// parents that are crossed over innovatoinCounter = stream.map(innovation
+			// parents that are crossed over innovationCounter = stream.map(innovation
 			// numbers).sort(acompb).get(0)
 			// will fix max fragmentation but not gaps within innovation list. innovation
 			// list still has historical representation is just not an efficient counting

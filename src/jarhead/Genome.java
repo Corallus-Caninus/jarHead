@@ -32,9 +32,6 @@ public class Genome implements Serializable { // serializable allows classes to 
 												// against networked/distributed genomes
 	private static final long serialVersionUID = 129348938L;
 
-	private static List<Integer> tmpList1 = new ArrayList<Integer>(); // buffer list
-	private static List<Integer> tmpList2 = new ArrayList<Integer>();
-
 	private final float PROBABILITY_PERTURBING = 0.9f; // TODO: move this up to evaluator with the rest of the
 														// hyperparameters
 
@@ -144,7 +141,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 		Integer[] nodeInnovationNumbers = new Integer[nodes.keySet().size()];
 		nodes.keySet().toArray(nodeInnovationNumbers);
 
-		List<ConnectionGene> attempts = new LinkedList();
+		List<ConnectionGene> attempts = new LinkedList<ConnectionGene>();
 		attempts.addAll(connections.values());
 
 		while (tries < this.maxConnections() && success == false) {
@@ -387,7 +384,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 		if (child.sortDepth()) { // TODO: can crossover ever yield hanging innie or outties?
 			return child;
 		} else {
-			return parent1;
+			return parent1; // ensure parent1 doesnt exist in genome otherwise two identical objects exist
 		}
 	}
 
@@ -402,10 +399,10 @@ public class Genome implements Serializable { // serializable allows classes to 
 	 * @return compatibility distance metric.
 	 */
 	public static float compatibilityDistance(Genome genome1, Genome genome2, float c1, float c2, float c3) {
+		// TODO: make distance metric functions more efficient
 		int excessGenes = countExcessGenes(genome1, genome2);
 		int disjointGenes = countDisjointGenes(genome1, genome2);
 		float avgWeightDiff = averageWeightDiff(genome1, genome2);
-
 		return excessGenes * c1 + disjointGenes * c2 + avgWeightDiff * c3;
 	}
 
@@ -418,10 +415,9 @@ public class Genome implements Serializable { // serializable allows classes to 
 	 */
 	public static int countMatchingGenes(Genome genome1, Genome genome2) {
 		int matchingGenes = 0;
-
 		// counts congruent node genes
-		List<Integer> nodeKeys1 = asSortedList(genome1.getNodeGenes().keySet(), tmpList1);
-		List<Integer> nodeKeys2 = asSortedList(genome2.getNodeGenes().keySet(), tmpList2);
+		List<Integer> nodeKeys1 = asSortedList(genome1.getNodeGenes().keySet());
+		List<Integer> nodeKeys2 = asSortedList(genome2.getNodeGenes().keySet());
 
 		int highestInnovation1 = nodeKeys1.get(nodeKeys1.size() - 1);
 		int highestInnovation2 = nodeKeys2.get(nodeKeys2.size() - 1);
@@ -437,8 +433,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 		}
 
 		// count congruent connection genes
-		List<Integer> conKeys1 = asSortedList(genome1.getConnectionGenes().keySet(), tmpList1);
-		List<Integer> conKeys2 = asSortedList(genome2.getConnectionGenes().keySet(), tmpList2);
+		List<Integer> conKeys1 = asSortedList(genome1.getConnectionGenes().keySet());
+		List<Integer> conKeys2 = asSortedList(genome2.getConnectionGenes().keySet());
 
 		highestInnovation1 = conKeys1.get(conKeys1.size() - 1);
 		highestInnovation2 = conKeys2.get(conKeys2.size() - 1);
@@ -469,8 +465,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 	public static int countDisjointGenes(Genome genome1, Genome genome2) {
 		int disjointGenes = 0;
 
-		List<Integer> nodeKeys1 = asSortedList(genome1.getNodeGenes().keySet(), tmpList1);
-		List<Integer> nodeKeys2 = asSortedList(genome2.getNodeGenes().keySet(), tmpList2);
+		List<Integer> nodeKeys1 = asSortedList(genome1.getNodeGenes().keySet());
+		List<Integer> nodeKeys2 = asSortedList(genome2.getNodeGenes().keySet());
 
 		int highestInnovation1 = nodeKeys1.get(nodeKeys1.size() - 1);
 		int highestInnovation2 = nodeKeys2.get(nodeKeys2.size() - 1);
@@ -488,8 +484,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 			}
 		}
 
-		List<Integer> conKeys1 = asSortedList(genome1.getConnectionGenes().keySet(), tmpList1);
-		List<Integer> conKeys2 = asSortedList(genome2.getConnectionGenes().keySet(), tmpList2);
+		List<Integer> conKeys1 = asSortedList(genome1.getConnectionGenes().keySet());
+		List<Integer> conKeys2 = asSortedList(genome2.getConnectionGenes().keySet());
 
 		highestInnovation1 = conKeys1.get(conKeys1.size() - 1);
 		highestInnovation2 = conKeys2.get(conKeys2.size() - 1);
@@ -518,8 +514,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 	public static int countExcessGenes(Genome genome1, Genome genome2) {
 		int excessGenes = 0;
 
-		List<Integer> nodeKeys1 = asSortedList(genome1.getNodeGenes().keySet(), tmpList1);
-		List<Integer> nodeKeys2 = asSortedList(genome2.getNodeGenes().keySet(), tmpList2);
+		List<Integer> nodeKeys1 = asSortedList(genome1.getNodeGenes().keySet());
+		List<Integer> nodeKeys2 = asSortedList(genome2.getNodeGenes().keySet());
 
 		int highestInnovation1 = nodeKeys1.get(nodeKeys1.size() - 1);
 		int highestInnovation2 = nodeKeys2.get(nodeKeys2.size() - 1);
@@ -535,8 +531,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 			}
 		}
 
-		List<Integer> conKeys1 = asSortedList(genome1.getConnectionGenes().keySet(), tmpList1);
-		List<Integer> conKeys2 = asSortedList(genome2.getConnectionGenes().keySet(), tmpList2);
+		List<Integer> conKeys1 = asSortedList(genome1.getConnectionGenes().keySet());
+		List<Integer> conKeys2 = asSortedList(genome2.getConnectionGenes().keySet());
 
 		highestInnovation1 = conKeys1.get(conKeys1.size() - 1);
 		highestInnovation2 = conKeys2.get(conKeys2.size() - 1);
@@ -566,8 +562,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 		int matchingGenes = 0;
 		float weightDifference = 0;
 
-		List<Integer> conKeys1 = asSortedList(genome1.getConnectionGenes().keySet(), tmpList1);
-		List<Integer> conKeys2 = asSortedList(genome2.getConnectionGenes().keySet(), tmpList2);
+		List<Integer> conKeys1 = asSortedList(genome1.getConnectionGenes().keySet());
+		List<Integer> conKeys2 = asSortedList(genome2.getConnectionGenes().keySet());
 
 		int highestInnovation1 = conKeys1.get(conKeys1.size() - 1);
 		int highestInnovation2 = conKeys2.get(conKeys2.size() - 1);
@@ -590,19 +586,17 @@ public class Genome implements Serializable { // serializable allows classes to 
 	 * Utility function for distance equation metrics. clears given list and adds
 	 * all of collection c then sorts the list in ascending order.
 	 * 
-	 * @param c    collection of integersQc
-	 * @param list integer list
+	 * @param c collection of integersQc
 	 * @return assorted list
 	 */
-	private static List<Integer> asSortedList(Collection<Integer> c, List<Integer> list) {
+	private static List<Integer> asSortedList(Collection<Integer> c) {
+		List<Integer> list = new ArrayList<Integer>();
 		list.clear();
 		list.addAll(c);
 		java.util.Collections.sort(list);
 		return list;
 	}
 
-	// TODO: ONLY WORKS IF UNIQUE CONNECTIONGENES ARE ATTEMPTED IN
-	// ADDCONNECTIONMUTATION add some form of memoization for mutation attempts
 	/**
 	 * Calculates the maximum number of connections possible for a given topology
 	 * (NodeGenes).
