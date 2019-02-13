@@ -127,9 +127,11 @@ public class ConnectionGene implements Serializable {
 
 		if (match.isPresent()) {
 			this.innovation = match.get().innovation; // TODO: reset innovation etc. within this method. WIP
+//			System.out.println("REPEAT CONNECTION: " + innovation);
 			return true;
 		} else { // novel connection
 			this.innovation = connectionInnovation.updateInnovation();
+//			System.out.println("Novel connection: " + innovation);
 			return false;
 		}
 	}

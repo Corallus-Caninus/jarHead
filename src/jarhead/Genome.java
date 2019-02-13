@@ -35,7 +35,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 	private static List<Integer> tmpList1 = new ArrayList<Integer>(); // buffer list
 	private static List<Integer> tmpList2 = new ArrayList<Integer>();
 
-	private final float PROBABILITY_PERTURBING = 0.9f;
+	private final float PROBABILITY_PERTURBING = 0.9f; // TODO: move this up to evaluator with the rest of the
+														// hyperparameters
 
 	private Map<Integer, ConnectionGene> connections; // Integer map key is equivalent to connection innovation
 	private Map<Integer, NodeGene> nodes; // Integer map key is equivalent to node innovation aka node ID
@@ -125,13 +126,6 @@ public class Genome implements Serializable { // serializable allows classes to 
 	 */
 	public void addConnectionMutation(Random r, Counter innovation, List<Genome> genomes) {
 
-		genomes.remove(this);
-		int tries = 0;
-		boolean success = false;
-
-		Integer[] nodeInnovationNumbers = new Integer[nodes.keySet().size()];
-		nodes.keySet().toArray(nodeInnovationNumbers);
-
 		// TODO: Need to support multiple recurrent connections, consider refactoring
 		// when multiple recurrent connections are added. this may be best done with
 		// cyclic
@@ -142,8 +136,18 @@ public class Genome implements Serializable { // serializable allows classes to 
 		// maxConnections)
 		// add memoization to this by storing random numbers/ConnectionGenes that have
 		// been tried.
-		while (tries < 4 * this.maxConnections() && success == false) {
-			tries++;
+
+		genomes.remove(this);
+		int tries = 0;
+		boolean success = false;
+
+		Integer[] nodeInnovationNumbers = new Integer[nodes.keySet().size()];
+		nodes.keySet().toArray(nodeInnovationNumbers);
+
+		List<ConnectionGene> attempts = new LinkedList();
+		attempts.addAll(connections.values());
+
+		while (tries < this.maxConnections() && success == false) {
 
 			Integer keyNode1 = nodeInnovationNumbers[r.nextInt(nodeInnovationNumbers.length)];
 			Integer keyNode2 = nodeInnovationNumbers[r.nextInt(nodeInnovationNumbers.length)];
@@ -166,21 +170,36 @@ public class Genome implements Serializable { // serializable allows classes to 
 				connectionImpossible = true;
 			} else if (node1.getType() == NodeGene.TYPE.OUTPUT && node2.getType() == NodeGene.TYPE.OUTPUT) {
 				connectionImpossible = true;
-			}
+			} // connectionImpossible shouldnt count for tries++
 
 			boolean connectionExists = false;
-			for (ConnectionGene con : connections.values()) { // check if connection exists already (locally)
+
+			// only if connection exists in attempts should tries++ (and attempts should
+			// remove the respective connection)
+			for (ConnectionGene con : connections.values()) { // change this to attempts
 				if (con.getInNode() == node1.getId() && con.getOutNode() == node2.getId()) { // existing connection
-					connectionExists = true;
+					if (attempts.contains(con)) {
+						connectionExists = true;
+						attempts.remove(con);
+					}
 					break;
 				} else if (con.getInNode() == node2.getId() && con.getOutNode() == node1.getId()) { // existing
 																									// connection
-					connectionExists = true;
+					if (attempts.contains(con)) {
+						connectionExists = true;
+						attempts.remove(con);
+					}
 					break;
 				}
 			}
+
 			// local ConnectionGene check
-			if (connectionExists || connectionImpossible) {
+			if (connectionImpossible) {
+				continue;
+			}
+			if (connectionExists) {
+				tries++; // if connectionExists then try++ once for each existing connection. if
+							// connectionImpossible dont increase tries
 				continue;
 			}
 
@@ -262,7 +281,9 @@ public class Genome implements Serializable { // serializable allows classes to 
 			for (ConnectionGene in : ins) {
 				Optional<ConnectionGene> match = outs.parallelStream().filter(o -> o.getInNode() == in.getOutNode())
 						.findAny();
-				if (match.isPresent() && !nodes.containsKey(in.getOutNode())) { // TODO: what exactly is going on here?
+				if (match.isPresent() && !nodes.containsKey(in.getOutNode())) { // this should allow a con to
+																				// split multiple times in later
+																				// generations
 					newToOut = new ConnectionGene(match.get());
 					inToNew = new ConnectionGene(in);
 					break; // break from genome scan
@@ -274,6 +295,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 		}
 
 		if (inToNew != null) { // previous node exists in global genome
+//			System.out.println("REPEAT NODE");
 			newNode = new NodeGene(TYPE.HIDDEN, inToNew.getOutNode());
 		} else { // this node is novel
 			newNode = new NodeGene(TYPE.HIDDEN, nodeInnovation.updateInnovation());
@@ -332,8 +354,8 @@ public class Genome implements Serializable { // serializable allows classes to 
 						: new ConnectionGene(parent2.getConnectionGenes().get(parent1Node.getInnovation()));
 
 				if (!child.nodes.containsKey(childConGene.getOutNode()) // TODO: refactor this into above ternary
-																		// operator (&& with r.next?) is this a proper
-																		// way to perform crossover? rtfp
+																		// operator (&& with r.next?) there should be a
+																		// better solution for this/
 						|| !child.nodes.containsKey(childConGene.getInNode()))
 					childConGene = new ConnectionGene(parent1Node);
 
@@ -612,9 +634,18 @@ public class Genome implements Serializable { // serializable allows classes to 
 			// return next + boundaryConnections + hiddenNodes;
 			// for circular and recurrent connections:
 			// return hiddenNodes*hiddenNodes + hiddenNodes + boundaryConnections
+			//
+			// correction: recurrent connections allow for infinite connections given a
+			// topology
 		}
 	}
 
+	/**
+	 * Assigns depth to a genome. Ensures all nodes have minimum amounts of
+	 * connections and no circularity is present
+	 * 
+	 * @return true if genome passes
+	 */
 	public boolean sortDepth() {
 		List<ConnectionGene> buffer = new ArrayList<ConnectionGene>(connections.size());
 		Queue<ConnectionGene> connectionSignals = new LinkedList<ConnectionGene>(); // expanding ring buffer

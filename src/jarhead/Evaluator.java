@@ -18,7 +18,7 @@ public abstract class Evaluator {
 	private FitnessGenomeComparator fitComp = new FitnessGenomeComparator();
 
 	private Counter connectionInnovation;
-	private Counter nodeInnovation; 
+	private Counter nodeInnovation;
 
 	private Random random = new Random();
 
@@ -61,7 +61,7 @@ public abstract class Evaluator {
 		this.connectionInnovation = connectionInnovation; // TODO: this should be its own object to prevent lost genomes
 															// from exploding innovation (not critical)
 		this.nodeInnovation = nodeInnovation;
-		
+
 		genomes = new ArrayList<Genome>(populationSize);
 		for (int i = 0; i < populationSize; i++) {
 			genomes.add(new Genome(startingGenome));
@@ -92,6 +92,7 @@ public abstract class Evaluator {
 		fittestGenome = null;
 
 		// Place genomes into species
+		System.out.println("Placing genomes into species..");
 		for (Genome g : genomes) {
 			boolean foundSpecies = false;
 			for (Species s : species) {
@@ -110,7 +111,7 @@ public abstract class Evaluator {
 				mappedSpecies.put(g, newSpecies);
 			}
 		}
-
+		System.out.println("Clearing unused species..");
 		// Remove unused species
 		Iterator<Species> iter = species.iterator();
 		while (iter.hasNext()) {
@@ -119,7 +120,7 @@ public abstract class Evaluator {
 				iter.remove();
 			}
 		}
-
+		System.out.println("Evaluating genomes and assigning score");
 		// Evaluate genomes and assign score
 		for (Genome g : genomes) {
 			Species s = mappedSpecies.get(g); // Get species of the genome
@@ -136,6 +137,7 @@ public abstract class Evaluator {
 			}
 		}
 
+		System.out.println("Placing best genomes into next generation..");
 		// put best genomes from each species directly into next generation
 		// is this (fittestInSpecies) explicit fitness sharing from k.stanely?
 		for (Species s : species) {
@@ -153,9 +155,9 @@ public abstract class Evaluator {
 			Genome p2 = getRandomGenomeBiasedAdjustedFitness(s, random);
 
 			Genome child;
-			if (scoreMap.get(p1) >= scoreMap.get(p2)) { 
-				child = Genome.crossover(p1, p2, random); //TODO: need to handle when child is not possible. 
-			} else {									 // Is this due to innovation number?
+			if (scoreMap.get(p1) >= scoreMap.get(p2)) {
+				child = Genome.crossover(p1, p2, random); // TODO: need to handle when child is not possible.
+			} else { // Is this due to innovation number?
 				child = Genome.crossover(p2, p1, random);
 			} // else they are equal so disjoint and excess genes must be randomized
 				// respectively not between parents.
@@ -171,13 +173,17 @@ public abstract class Evaluator {
 				child.addNodeMutation(random, connectionInnovation, nodeInnovation, genomes);
 			}
 			nextGenGenomes.add(child);
+			// TODO: need to "garbage collect" fragmented innovation numbers lost with
+			// parents that are crossed over innovatoinCounter = stream.map(innovation
+			// numbers).sort(acompb).get(0)
+			// will fix max fragmentation but not gaps within innovation list. innovation
+			// list still has historical representation is just not an efficient counting
+			// method wrt crossover
 		}
 
 		genomes = nextGenGenomes;
 		nextGenGenomes = new ArrayList<Genome>();
 	}
-
-	// where is explicit fitness sharing executed?
 
 	/**
 	 * Selects a random species from the species list, where species with a higher
