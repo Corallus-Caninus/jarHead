@@ -121,8 +121,6 @@ public class Network {
 			}
 		}
 
-		final long startTime = System.currentTimeMillis();
-
 		// GR8 Squisher 2.0
 		for (int n = 0; n < nodeSignals.size(); n++) { // sum initial nodeSignals then propagating through hidden nodes
 			Integer val = nodeSignals.get(n);
@@ -193,8 +191,6 @@ public class Network {
 				}
 			} // EOF
 		} // EOW
-
-		final long endTime = System.currentTimeMillis();
 
 		for (int i = 0; i < nodeSignals.size(); i++) {
 			for (int j = i + 1; j < nodeSignals.size(); j++) {

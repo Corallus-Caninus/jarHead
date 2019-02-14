@@ -229,7 +229,7 @@ public class Genome implements Serializable { // serializable allows classes to 
 
 		}
 		if (success == false) {
-			System.out.println("DETECTED: maxAttempt reached, genome contains all possible connections!");
+//			System.out.println("DETECTED: maxAttempt reached, genome contains all possible connections!");
 		}
 		if (!this.sortDepth()) {
 			System.out.println("BROKEN INSIDE CONNECTION MUTATION");
@@ -310,6 +310,9 @@ public class Genome implements Serializable { // serializable allows classes to 
 
 		if (!this.sortDepth()) {
 			System.out.println("\n\n IMPOSSIBLE \n\n");
+
+			System.out.println("Connections: " + inToNew.getInNode() + "->" + inToNew.getOutNode() + " "
+					+ newToOut.getInNode() + "->" + newToOut.getOutNode());
 			System.out.println(this);
 
 			NetworkPrinter testing = new NetworkPrinter(this);
@@ -676,7 +679,9 @@ public class Genome implements Serializable { // serializable allows classes to 
 			connectionSignals
 					.addAll(buffer.parallelStream().filter(g -> g.getInNode() == c).collect(Collectors.toList()));
 		}
-		for (int depth = 1; !buffer.isEmpty(); depth++) {
+
+		int depth;
+		for (depth = 1; !buffer.isEmpty(); depth++) {
 			if (connectionSignals.isEmpty()) {
 				return false; // circularity
 			}
@@ -693,8 +698,22 @@ public class Genome implements Serializable { // serializable allows classes to 
 			for (ConnectionGene a : connectionSignals) {
 				nodes.get(a.getInNode()).setDepth(depth);
 			}
-
 		}
+		// last assignment is to output nodes
+		for (NodeGene a : nodes.values().stream().filter(n -> n.getType() == TYPE.OUTPUT)
+				.collect(Collectors.toList())) {
+			a.setDepth(depth-1); // must be -1 from previous iteration
+		}
+
 		return true;
+	}
+
+	public int getMaxDepth() {
+		int depth;
+		depth = nodes.values().stream().sorted((n1, n0) -> {
+			return n0.getDepth() - n1.getDepth();
+		}).collect(Collectors.toList()).get(0).getDepth();
+
+		return depth;
 	}
 }
