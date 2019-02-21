@@ -1,220 +1,121 @@
 package jarhead;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+import java.util.Stack;
 
-/**
- * iterates through network performing forward propagation.
- * 
- * @author ElectricIsotope
- *
- */
+import jarhead.NodeGene.TYPE;
+import jarhead.neat.NetworkPrinter;
 
-//TODO: PRIMARY: Rewrite with streams? everything here should be (java 8?) 
-// immutable method (setup is overrated. sorting to depth will suffice).
+// NOTE: cyclic connections fully define unrolled recurrent connections. 
+// Therefore only need to implement Cyclic connections with activated method.
+// implement activated here with cyclic additions.
 
-//TODO: REFACTOR
+// TODO: can this entire method be one call to a parallel stream over buffer? (immutable no exposed tmpConnections or buffer)
 public class Network {
-	// PERSISTENT DATA STRUCTURES
-	private Map<Integer, Float> srecurrentPositions = new HashMap<Integer, Float>(); // a flag for weight and node
-																						// position of recurrent
-																						// connections
-	private List<Integer> singene = new ArrayList<Integer>(); // in connections
-	private List<Integer> soutgene = new ArrayList<Integer>(); // out connections
-	private List<Float> scheckWeight = new ArrayList<Float>(); // connection weights
-	private List<Integer> soutputs = new ArrayList<Integer>(); // output nodes
-	private List<Integer> sinputs = new ArrayList<Integer>(); // input nodes
+	// buffer of all connections which is processed during forward propagation
+	private Stack<ConnectionGene> tmpConnections = new Stack<ConnectionGene>();
+	// connectionSignals which are used during processing from buffer
+	private Stack<ConnectionGene> buffer = new Stack<ConnectionGene>();
+	// values passed per forward propagation by depth
+	private ConcurrentHashMap<Integer, Float> signals;// should be size of
+														// gene.getNodeGenes
 
-	// PRIORITY: OPTIMIZE SETUP, INTEGRATE RUN METHOD INTO SETUP TO
-	// SIMPLIFY/REFACTOR RUN. STORE RUN ALGORITHM AS SORTED CONNECTIONWEIGHT, INGENE
-	// AND OUTGENE IN QUEUE STRUCTURE FOR QUICK SINGLY LINKED-LIST BASED ALGORITHM
-	// (LOOK AHEAD ONE
-	// INDEX TO SEE WHEN WE SHOULD ACCUMULATE AND ACTIVATE)
+	private Genome genome;
 
-	// CONSTRUCTOR
-	public Network(Genome genome) {
-		genome.getConnectionGenes().forEach((x, l) -> { // NOTE: setup constructor is in theory parallel already due to
-														// foreach method NOTE: foreach method must be on a concurrent
-														// structure i.e.: concurrentHashMap. TODO: log system threads
-														// to verify
-			if (l.isExpressed()) {
-				singene.add(l.getInNode());
-				soutgene.add(l.getOutNode());
-				scheckWeight.add(l.getWeight());
-			}
-		});
-		// consider constructing flags for singene w.r.t. soutgene to create depth.
-		// (concurrent)HashMap for parallel computation given depth keys? yas.
+	public Network(Genome gene) {
+		this.genome = gene;
+		signals = new ConcurrentHashMap<Integer, Float>(genome.getConnectionGenes().size());
+		// size used until proper removal is implemented per depth
 
-		for (int i = 0; i < singene.size(); i++) { // place recurrent positions.
-			if (singene.get(i).equals(soutgene.get(i)) && !srecurrentPositions.containsKey(singene.get(i))) {
-//				System.out.println("recurrent exception! @ " + soutgene.get(i) + " : " + singene.get(i));
-				srecurrentPositions.put(soutgene.remove(i), scheckWeight.remove(i));
-				singene.remove(i);
-			}
-		}
-		genome.getNodeGenes().forEach((k, v) -> { // mark input and output nodes for start/finish of current run()
-													// method
-			if (v.getType() == NodeGene.TYPE.INPUT) {
-				sinputs.add(v.getId());
-			} else if (v.getType() == NodeGene.TYPE.OUTPUT) {
-				soutputs.add(v.getId());
-			}
-		});
 	}
 
-	// TODO: make all infinite loops finite. fix squisher algorithm. fix static data
-	// structure divergence in setup vs. run.
+	public List<Float> run(List<Float> sensors) {
+		// TODO: remove inNode != outNode condition once addConnectionMutation is
+		// patched
+		// TODO: sort within constructor not each run.
+		tmpConnections.addAll(genome.getConnectionGenes().values().stream()
+				.filter(c -> c.isExpressed() && c.getInNode() != c.getOutNode()).sorted((c1, c2) -> {
+					return genome.getNodeGenes().get(c2.getOutNode()).getDepth()
+							- genome.getNodeGenes().get(c1.getOutNode()).getDepth();
+				}).collect(Collectors.toList()));
 
-	// TODO: organize into depth layers. matrix multiplication with minimum memory
-	// access < data structure manipulation processing time (think recursive
-	// solution on
-	// the stack time). use stream method to not alter data structure in run method.
+		// setup DataStructures for forward propagation
+		buffer.addAll(
+				tmpConnections.stream().filter(c -> genome.getNodeGenes().get(c.getInNode()).getType() == TYPE.INPUT)
+						.collect(Collectors.toList()));
+		buffer.forEach(i -> signals.put(i.getInNode(), activate(sensors.get(i.getInNode()))));
 
-	// this may fix the above todo: for(;depth<maxDepth;++) as a finite solution.
-	// remember to give parallel access to data structures (synchronized hashmap--
-	// how does this differ from stream? either or?) to prevent memory access
-	// bottleneck in gpu and multithreading otherwise. would like to write flexible
-	// code to fallback to multithread if not gpu supported through JNI (like
-	// arapari).
-
-	public List<Float> run(List<Float> sensors) { // REFACTOR AS SOON AS OPERATIONAL
-		// TEMPORARY DATA STRUCTURES
-
-		Map<Integer, Float> recurrentPositions = new HashMap<Integer, Float>(srecurrentPositions); // TODO: replace
-																									// assignments with
-																									// stream methods
-		List<Integer> ingene = new ArrayList<Integer>(singene);
-		List<Integer> outgene = new ArrayList<Integer>(soutgene);
-		List<Float> checkWeight = new ArrayList<Float>(scheckWeight);
-
-		List<Integer> outputs = new ArrayList<Integer>(soutputs);
-		List<Integer> inputs = new ArrayList<Integer>(sinputs);
-
-		List<Float> connectionSignals = new ArrayList<Float>(); // runtime data structures
-		List<Integer> nodeSignals = new ArrayList<Integer>();
-		Map<Integer, Float> recurrentSignals = new HashMap<Integer, Float>();
-
-		if (sensors.size() != inputs.size()) {
-			System.out.println("FATAL ERROR: INPUTS AND SENSORS DO NOT ALIGN" + sensors + inputs);
+		tmpConnections.removeAll(buffer); // breaks initial topology
+		if (sensors.size() != genome.getNodeGenes().values().stream().filter(n -> n.getType() == TYPE.INPUT).count()) {
+			System.out.println("ERROR: improper input to Network: " + this + "Expecting: "
+					+ genome.getNodeGenes().values().stream().filter(n -> n.getType() == TYPE.INPUT).count()
+					+ "recieved: " + sensors.size() + " ");
 			System.exit(0);
 		}
 
-		// INITIALIZE
-		// too many loops for this procedure. while(!inputs.isEmpty) is only needed due
-		// to for() index not being adjusted after remove operation
-		while (!inputs.isEmpty()) { // prepare the network for forward propagation (inputs I.E.: row 0).
-			for (int i = 0; i < inputs.size(); i++) {
-				int inputVal = inputs.remove(i);
-				float sensorVal = sensors.remove(i);
-				while (ingene.contains(inputVal)) {
-					for (int g = 0; g < ingene.size(); g++) {
-						if (ingene.get(g).equals(inputVal)) {
-							nodeSignals.add(outgene.remove(g));
-							connectionSignals.add(checkWeight.remove(g) * sensorVal); // multiply weight by input value
-							ingene.remove(g);
-						}
-					}
+		// Forward propagate
+		for (int i = 1; !buffer.isEmpty(); i++) {
+			buffer.parallelStream().forEach(c -> {
+				signals.put(c.getOutNode(),
+						zeroIfNull(signals.get(c.getOutNode())) + signals.get(c.getInNode()) * c.getWeight());
+			});
+			buffer.clear();
+
+			while (!tmpConnections.isEmpty()
+					&& genome.getNodeGenes().get(tmpConnections.peek().getInNode()).getDepth() == i) {
+				buffer.add(tmpConnections.pop());
+			}
+
+			// activate all nodes of this depth
+			for (int n : signals.keySet()) {
+				if (genome.getNodeGenes().get(n).getDepth() == i) {
+					signals.put(n, activate(signals.get(n)));
 				}
+				// TODO: how can old signals be removed from hashTable else hashTable is size of
+				// connections and should have connections.size initial capacity
+//				else if (genome.getNodeGenes().get(n).getDepth() < i) {
+//					System.out.println("removing a signal...");
+//					signals.remove(n); // can this be called within iterator?
+//				}
+
+				// why do all depth have same value
+//				System.out.println("In the loop with depth: " + i);
+//				signals.forEach((a, f) -> {
+//					System.out.println("SIGNAL: " + a + ": " + f);
+//				});
 			}
 		}
+		// this is a patchwork solution
+		signals.keySet().stream()
+				.filter(n -> !tmpConnections.stream().map(c -> c.getInNode()).collect(Collectors.toList()).contains(n)
+						&& !tmpConnections.stream().map(c -> c.getOutNode()).collect(Collectors.toList()).contains(n)
+						&& genome.getNodeGenes().get(n).getType() != TYPE.OUTPUT)
+				.forEach(n -> signals.remove(n));
 
-		// GR8 Squisher 2.0
-		for (int n = 0; n < nodeSignals.size(); n++) { // sum initial nodeSignals then propagating through hidden nodes
-			Integer val = nodeSignals.get(n);
-			for (int m = n + 1; m < nodeSignals.size(); m++) {
-				if (val.equals(nodeSignals.get(m))) {
-					connectionSignals.set(n, connectionSignals.get(n) + connectionSignals.remove(m));
-					nodeSignals.remove(m);
-					n = 0;// TODO: fix initial condition so this can be k--
-				}
-			}
-		}
+		// TESTING RETURN VALUE"
+//		sensors.forEach(s -> {
+//			System.out.println("INPUT: " + s);
+//		});
+//		signals.values().forEach(s -> {
+//			System.out.println("OUTPUT: " + s);
+//		});
+//		signals.keySet().forEach(k -> {
+//			System.out.print(k);
+//			System.out.println(" " + genome.getNodeGenes().get(k).getDepth());
+//		});
+		// TESTING RETURN VALUE
+		return signals.values().stream().collect(Collectors.toList());
+	}
 
-		// EXECUTE
-		while (!ingene.isEmpty() && !outgene.isEmpty()) { // too many loops for this procedure
-			for (int i = 0; i < nodeSignals.size(); i++) {
-				if (outgene.contains(nodeSignals.get(i)) || outputs.contains(nodeSignals.get(i))) {
-					continue;
-				}
+	public float activate(float f) { // will this overload for unboxing?
+		return (float) (1f / (1f + Math.exp(-4.8f * f)));
+	}
 
-				// check for recurrent positions and initialize signals or process signals.
-				if (recurrentPositions.containsKey(nodeSignals.get(i))) { // this needs to see squisher in time...
-					int val = nodeSignals.get(i); // this condition must be before default condition so recurrent
-													// connections are handled marginally prior to forward propagation
-					if (recurrentSignals.containsKey(val)) {
-						connectionSignals.add(recurrentSignals.remove(val)); // send activated connectionSignals
-						nodeSignals.add(val);
-
-						recurrentSignals.put(val, recurrentPositions.remove(val) * connectionSignals.get(i));
-						recurrentPositions.remove(val);
-					} else { // initialize recurrent signals hashmap for that value.
-						recurrentSignals.put(val, recurrentPositions.remove(val) * connectionSignals.get(i));
-						recurrentPositions.remove(val); // ERROR: removed but not resolved below
-					}
-				} else {
-
-					int val = nodeSignals.get(i);
-
-					if (outputs.contains(val)) {
-						System.out.println("FATAL ERROR IN THE LOOP: DESTROYING OUTNODE IN NODESIGNALS: " + val);
-						System.out.println(ingene);
-						System.out.println(outgene);
-						System.out.println(nodeSignals);
-					}
-
-					float outSignal = (float) (1f / (1f + Math.exp((-4.8f * connectionSignals.remove(i)))));
-					nodeSignals.remove(i);
-
-					while (ingene.contains(val)) {
-						int j = ingene.indexOf(val);
-
-						// process non-recurrent signals which have summed all incoming
-						// connectionSignals
-						connectionSignals.add((checkWeight.remove(j)) * outSignal);
-						nodeSignals.add(outgene.remove(j));
-						ingene.remove(j);
-					}
-				}
-				// GR8 squisher 2.0
-				for (int k = 0; k < nodeSignals.size(); k++) {
-					Integer vals = nodeSignals.get(k);
-					for (int m = k + 1; m < nodeSignals.size(); m++) {
-						if (vals.equals(nodeSignals.get(m))) {
-							connectionSignals.set(k, connectionSignals.get(k) + connectionSignals.remove(m));
-							nodeSignals.remove(m);
-							k = 0; // TODO: fix initial condition so this can be k--
-						}
-					}
-				}
-			} // EOF
-		} // EOW
-
-		for (int i = 0; i < nodeSignals.size(); i++) {
-			for (int j = i + 1; j < nodeSignals.size(); j++) {
-				if (nodeSignals.get(i).compareTo(nodeSignals.get(j)) >= 0) { // should never have equal to zero. can
-																				// we
-																				// leave this to infinite loop in
-																				// error
-																				// case?
-					nodeSignals.add(i, nodeSignals.remove(j));
-					connectionSignals.add(i, connectionSignals.remove(j));
-					i = 0; // does this work.
-				}
-			}
-		}
-
-		// TODO: move activation up a condition
-		for (int i = 0; i < connectionSignals.size(); i++) { // final activation
-			connectionSignals.set(i, (float) (1f / (1f + Math.exp(-4.8f * connectionSignals.get(i))))); // move this up
-																										// a condition
-		}
-
-		return (connectionSignals); // ensure that connectionSignals keep index values of nodes consistent.
-									// since connections can arrive at different times based on topologies, sort the
-									// outputs by incrementing nodeSignal values (output 1 comes before 2 etc.)
-
+	// used for nodes that dont have a value in the hashmap and summing incoming
+	// connections
+	private static Float zeroIfNull(Float val) {
+		return (val == null) ? 0 : val;
 	}
 }
