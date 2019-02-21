@@ -263,10 +263,10 @@ public class Genome implements Serializable {
 		// SCAN GENOMES//
 		for (Genome a : genomes) { // Both connections must be in same topology
 			ins = a.getConnectionGenes().values().parallelStream()
-					.filter(c -> c.getInNode() == con.getInNode() && c.isExpressed() && c.getInNode() != c.getOutNode())
+					.filter(c -> c.getInNode() == con.getInNode() && c.isExpressed())
 					.collect(Collectors.toList());
 			outs = a.getConnectionGenes().values().parallelStream().filter(
-					c -> c.getOutNode() == con.getOutNode() && c.isExpressed() && c.getInNode() != c.getOutNode())
+					c -> c.getOutNode() == con.getOutNode() && c.isExpressed())
 					.collect(Collectors.toList());
 
 			for (ConnectionGene in : ins) {
@@ -428,8 +428,8 @@ public class Genome implements Serializable {
 			n.setDepth(0);
 		});
 
-		// filter recurrent connections
-		buffer = connections.values().parallelStream().filter(c -> c.getInNode() != c.getOutNode() && c.isExpressed())
+		// filter unexpressed connections
+		buffer = connections.values().parallelStream().filter(c -> c.isExpressed())
 				.collect(Collectors.toList());
 
 		// check hanging inNodes
@@ -437,7 +437,7 @@ public class Genome implements Serializable {
 				.containsAll(nodes.values().parallelStream()
 						.filter(n -> n.getType() == NodeGene.TYPE.HIDDEN || n.getType() == NodeGene.TYPE.INPUT)
 						.map(n -> n.getId()).collect(Collectors.toList()))) {
-			System.out.println("Innie");
+//			System.out.println("Innie");
 			return false;
 		}
 		// check hanging outNodes
@@ -445,7 +445,7 @@ public class Genome implements Serializable {
 				.containsAll(nodes.values().parallelStream()
 						.filter(n -> n.getType() == NodeGene.TYPE.HIDDEN || n.getType() == NodeGene.TYPE.OUTPUT)
 						.map(n -> n.getId()).collect(Collectors.toList()))) {
-			System.out.println("Outtie");
+//			System.out.println("Outtie");
 			return false;
 		}
 
