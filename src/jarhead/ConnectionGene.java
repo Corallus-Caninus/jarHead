@@ -1,8 +1,6 @@
 package jarhead;
 
 import java.io.*;
-import java.util.List;
-import java.util.Optional;
 
 /**
  * Connection Gene class for node connections.
@@ -99,7 +97,6 @@ public class ConnectionGene implements Serializable {
 		innovation = newInnovation;
 	}
 	
-
 	/**
 	 * @return new connectionGene with identical inNode outNode weight expression
 	 *         and innovation number.

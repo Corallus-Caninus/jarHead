@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
-import java.util.stream.Collectors;
 
 /**
  * Evaluator class.
@@ -102,7 +101,7 @@ public abstract class Evaluator {
 		System.out.println("Placing genomes into species..");
 		for (Genome g : genepool) {
 			Optional<Species> match = species.parallelStream()
-					.filter(s -> Genome.compatibilityDistance(g, s.mascot, C1, C2, C3) < DT).findAny();
+					.filter(s -> Chromosome.compatibilityDistance(g, s.mascot, C1, C2, C3) < DT).findAny();
 
 			if (match.isPresent()) {
 				match.get().members.add(g);
@@ -140,9 +139,6 @@ public abstract class Evaluator {
 		}
 
 		System.out.println("Placing best genomes into next generation..");
-		// put best genomes from each species directly into next generation
-		// is this (fittestInSpecies) explicit fitness sharing from k.stanely?
-
 		// TODO: fittestInSpecies gives nullPointerException (when fitness falls below
 		// 0). ensure species are removed appropriately and fittestGenome is passed on.
 		// something may be backwards in fitness
@@ -184,7 +180,10 @@ public abstract class Evaluator {
 			// numbers).sort(acompb).get(0)
 			// will fix max fragmentation but not gaps within innovation list. innovation
 			// list still has historical representation is just not an efficient counting
-			// method wrt crossover
+			// method wrt crossover.
+			
+			// This may be a good point to add a global ConnectionGene
+			// List and redo all instances of SCAN GENOMES. this will lead naturally into A.S.
 		}
 
 		genepool = nextGenGenomes;
@@ -324,7 +323,7 @@ public abstract class Evaluator {
 		 * @param r random seed.
 		 */
 		public void reset(Random r) {
-			int newMascotIndex = r.nextInt(members.size());
+//			int newMascotIndex = r.nextInt(members.size());
 //			this.mascot = members.get(newMascotIndex);
 			this.mascot = fitnessPop.get(0).genome; // was above. want to preserve best solutions and have clearly
 													// defined/consistent species boundaries given a stable centerpoint

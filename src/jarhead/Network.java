@@ -6,7 +6,6 @@ import java.util.stream.Collectors;
 import java.util.Stack;
 
 import jarhead.NodeGene.TYPE;
-import jarhead.neat.NetworkPrinter;
 
 // NOTE: cyclic connections fully define unrolled recurrent connections. 
 // Therefore only need to implement Cyclic connections with activated method.
@@ -113,8 +112,7 @@ public class Network {
 		return (float) (1f / (1f + Math.exp(-4.8f * f)));
 	}
 
-	// used for nodes that dont have a value in the hashmap and summing incoming
-	// connections
+	// used for nodes that dont have a previous value in the hashmap
 	private static Float zeroIfNull(Float val) {
 		return (val == null) ? 0 : val;
 	}
