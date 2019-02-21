@@ -194,11 +194,17 @@ public class Genome implements Serializable {
 			ConnectionGene newCon = new ConnectionGene(reversed ? node2.getId() : node1.getId(),
 					reversed ? node1.getId() : node2.getId(), weight, true);
 
-			// TODO: refactor globalCheck into ConnectionGene constructor and move
-			// connections.put. if this is the only time globalCheck is called (should be
-			// true given nodeGene's globalCheck) it is appropriate to inline into this
-			// method (Law of Dimiter wrt OOP). Also need to refactor addConnectionMutation
-			newCon.globalCheck(genomes, innovation);
+			// SCAN GENOMES//
+			Optional<ConnectionGene> match = genomes.parallelStream().map(g -> g.getConnectionGenes())
+					.flatMap(c -> c.values().parallelStream()
+							.filter(l -> l.getInNode() == newCon.getInNode() && l.getOutNode() == newCon.getOutNode()))
+					.findAny();
+			if (match.isPresent()) { // global match
+				newCon.setInnovation(match.get().getInnovation());
+			} else { // novel connection
+				newCon.setInnovation(innovation.updateInnovation());
+			}
+
 			connections.put(newCon.getInnovation(), newCon);
 
 			if (!this.setDepth()) {
@@ -215,12 +221,13 @@ public class Genome implements Serializable {
 			System.out.println("BROKEN INSIDE CONNECTION MUTATION");
 		}
 	}
+
 	public int getMaxDepth() {
 		int depth;
 		depth = nodes.values().stream().sorted((n1, n0) -> {
 			return n0.getDepth() - n1.getDepth();
 		}).collect(Collectors.toList()).get(0).getDepth();
-		
+
 		return depth;
 	}
 
@@ -613,7 +620,7 @@ public class Genome implements Serializable {
 				prev = next;
 			}
 			return next + boundaryConnections + hiddenNodes; // connections with self permissible
-			
+
 		}
 	}
 

@@ -94,6 +94,11 @@ public class ConnectionGene implements Serializable {
 	public int getInnovation() { // bad name. used as counter iterator (getter/setter)
 		return innovation;
 	}
+	
+	public void setInnovation(int newInnovation) { // bad name. used as counter iterator (getter/setter)
+		innovation = newInnovation;
+	}
+	
 
 	/**
 	 * @return new connectionGene with identical inNode outNode weight expression
@@ -103,32 +108,4 @@ public class ConnectionGene implements Serializable {
 		return new ConnectionGene(inNode, outNode, weight, expressed, innovation);
 	}
 
-	/**
-	 * Checks this connection against all connections in a Gene pool. Used for
-	 * global consistency of Connection innovation.
-	 * 
-	 * @param genomes              List of all genomes to be compared against.
-	 * @param connectionInnovation Counter for innovation number
-	 * @return True if innovation is matched and assigned
-	 */
-
-	public boolean globalCheck(List<Genome> genomes, Counter connectionInnovation) {
-		// TODO: inline this method and remove the respective innovationless counter
-
-		Optional<ConnectionGene> match = genomes.parallelStream().map(g -> g.getConnectionGenes())
-				.flatMap(c -> c.values().parallelStream().filter(l -> l.inNode == inNode && l.outNode == outNode))
-				.findAny();
-
-		// need to add condition for recurrent connections, cyclic will appear as normal
-		// connections wrt this method.
-
-		if (match.isPresent()) {
-			this.innovation = match.get().innovation; // TODO: reset innovation etc. within this method. WIP
-			return true;
-		} else { // novel connection
-			this.innovation = connectionInnovation.updateInnovation();
-//			System.out.println("Novel connection: " + innovation);
-			return false;
-		}
-	}
 }
