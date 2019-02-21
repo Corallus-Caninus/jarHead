@@ -113,10 +113,7 @@ public class ConnectionGene implements Serializable {
 	 */
 
 	public boolean globalCheck(List<Genome> genomes, Counter connectionInnovation) {
-		// TODO: move this method into constructor or add back to Genome
-		// addConnectionMutation method (proper oop solution). prefer to move as much
-		// innovation related code into this method (genome is bloated and becoming
-		// imperative)
+		// TODO: inline this method and remove the respective innovationless counter
 
 		Optional<ConnectionGene> match = genomes.parallelStream().map(g -> g.getConnectionGenes())
 				.flatMap(c -> c.values().parallelStream().filter(l -> l.inNode == inNode && l.outNode == outNode))
