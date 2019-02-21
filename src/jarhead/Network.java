@@ -18,24 +18,21 @@ public class Network {
 	// connectionSignals which are used during processing from buffer
 	private Stack<ConnectionGene> buffer = new Stack<ConnectionGene>();
 	// values passed per forward propagation by depth
-	private ConcurrentHashMap<Integer, Float> signals;// should be size of
+	private ConcurrentHashMap<Integer, Float> signals = new ConcurrentHashMap<Integer, Float>();// should be size of
 														// gene.getNodeGenes
 
 	private Genome genome;
 
 	public Network(Genome gene) {
 		this.genome = gene;
-		signals = new ConcurrentHashMap<Integer, Float>(genome.getConnectionGenes().size());
 		// size used until proper removal is implemented per depth
 
 	}
 
 	public List<Float> run(List<Float> sensors) {
-		// TODO: remove inNode != outNode condition once addConnectionMutation is
-		// patched
 		// TODO: sort within constructor not each run.
 		tmpConnections.addAll(genome.getConnectionGenes().values().stream()
-				.filter(c -> c.isExpressed() && c.getInNode() != c.getOutNode()).sorted((c1, c2) -> {
+				.filter(c -> c.isExpressed()).sorted((c1, c2) -> {
 					return genome.getNodeGenes().get(c2.getOutNode()).getDepth()
 							- genome.getNodeGenes().get(c1.getOutNode()).getDepth();
 				}).collect(Collectors.toList()));
@@ -72,12 +69,10 @@ public class Network {
 				if (genome.getNodeGenes().get(n).getDepth() == i) {
 					signals.put(n, activate(signals.get(n)));
 				}
-				// TODO: how can old signals be removed from hashTable else hashTable is size of
-				// connections and should have connections.size initial capacity
-//				else if (genome.getNodeGenes().get(n).getDepth() < i) {
+				else if (genome.getNodeGenes().get(n).getDepth() < i) {
 //					System.out.println("removing a signal...");
-//					signals.remove(n); // can this be called within iterator?
-//				}
+					signals.remove(n); // can this be called within iterator?
+				}
 
 				// why do all depth have same value
 //				System.out.println("In the loop with depth: " + i);
