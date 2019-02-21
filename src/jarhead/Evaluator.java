@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
 /**
  * Evaluator class.
  */
+
 public abstract class Evaluator {
 
 	private FitnessGenomeComparator fitComp = new FitnessGenomeComparator();
@@ -28,15 +29,17 @@ public abstract class Evaluator {
 	private float C1 = 1.0f; // why is probability perturbing not included here?
 	private float C2 = 1.0f;
 	private float C3 = 0.4f;
-	private float DT = 10.0f;
-	private float MUTATION_RATE = 0.5f;
-	private float ADD_CONNECTION_RATE = 0.7f;
-//	private float ADD_CONNECTION_RATE = 0.05f;
+//	private float DT = 10.0f;
+	private float DT = 30.0f;
+//	private float MUTATION_RATE = 0.5f;
+	private float MUTATION_RATE = 0.02f;
+//	private float ADD_CONNECTION_RATE = 0.7f;
+	private float ADD_CONNECTION_RATE = 0.02f;
 	private float ADD_NODE_RATE = 0.01f;
 
 	private int populationSize;
 
-	private List<Genome> genomes;
+	private List<Genome> genepool;
 	private List<Genome> nextGenGenomes;
 
 	private List<Species> species;
@@ -64,11 +67,13 @@ public abstract class Evaluator {
 															// from exploding innovation (not critical)
 		this.nodeInnovation = nodeInnovation;
 
-		genomes = new ArrayList<Genome>(populationSize);
+		genepool = new ArrayList<Genome>(populationSize);
+
+		// randomize initial weights as per stanley
 		for (int i = 0; i < populationSize; i++) {
-			genomes.add(new Genome(startingGenome));
-		} // serialized genome injection: i < populationSize-1; then add stored genome
-			// after this loop.
+			startingGenome.mutation(random);
+			genepool.add(new Genome(startingGenome));
+		}
 		nextGenGenomes = new ArrayList<Genome>(populationSize);
 		mappedSpecies = new HashMap<Genome, Species>();
 		scoreMap = new HashMap<Genome, Float>();
@@ -94,17 +99,15 @@ public abstract class Evaluator {
 		fittestGenome = null;
 
 		// Place genomes into species
-		System.out.println("Placing genomes into species.."); // This is bottleneck
-
-		// WIP replacing below compatibility method
-		for (Genome g : genomes) {
+		System.out.println("Placing genomes into species..");
+		for (Genome g : genepool) {
 			Optional<Species> match = species.parallelStream()
 					.filter(s -> Genome.compatibilityDistance(g, s.mascot, C1, C2, C3) < DT).findAny();
 
-			if(match.isPresent()) {
+			if (match.isPresent()) {
 				match.get().members.add(g);
 				mappedSpecies.put(g, match.get());
-			}else {
+			} else {
 				Species newSpecies = new Species(g);
 				species.add(newSpecies);
 				mappedSpecies.put(g, newSpecies);
@@ -121,11 +124,11 @@ public abstract class Evaluator {
 		}
 		System.out.println("Evaluating genomes and assigning score");
 		// Evaluate genomes and assign score
-		for (Genome g : genomes) {
+		for (Genome g : genepool) {
 			Species s = mappedSpecies.get(g); // Get species of the genome
 
 			float score = evaluateGenome(g);
-			float adjustedScore = score / mappedSpecies.get(g).members.size(); // explicit fitness sharing?
+			float adjustedScore = score / mappedSpecies.get(g).members.size(); // explicit fitness sharing
 
 			s.addAdjustedFitness(adjustedScore);
 			s.fitnessPop.add(new FitnessGenome(g, adjustedScore));
@@ -139,6 +142,10 @@ public abstract class Evaluator {
 		System.out.println("Placing best genomes into next generation..");
 		// put best genomes from each species directly into next generation
 		// is this (fittestInSpecies) explicit fitness sharing from k.stanely?
+
+		// TODO: fittestInSpecies gives nullPointerException (when fitness falls below
+		// 0). ensure species are removed appropriately and fittestGenome is passed on.
+		// something may be backwards in fitness
 		for (Species s : species) {
 			Collections.sort(s.fitnessPop, fitComp);
 			Collections.reverse(s.fitnessPop);
@@ -165,11 +172,11 @@ public abstract class Evaluator {
 			}
 			if (random.nextFloat() < ADD_CONNECTION_RATE) {
 				// System.out.println("Adding connection mutation...");
-				child.addConnectionMutation(random, connectionInnovation, genomes);
+				child.addConnectionMutation(random, connectionInnovation, genepool);
 			}
 			if (random.nextFloat() < ADD_NODE_RATE) {
 				// System.out.println("Adding node mutation...");
-				child.addNodeMutation(random, connectionInnovation, nodeInnovation, genomes);
+				child.addNodeMutation(random, connectionInnovation, nodeInnovation, genepool);
 			}
 			nextGenGenomes.add(child);
 			// TODO: need to "garbage collect" fragmented innovation numbers lost with
@@ -180,7 +187,7 @@ public abstract class Evaluator {
 			// method wrt crossover
 		}
 
-		genomes = nextGenGenomes;
+		genepool = nextGenGenomes;
 		nextGenGenomes = new ArrayList<Genome>();
 	}
 
@@ -206,7 +213,8 @@ public abstract class Evaluator {
 			}
 		}
 		throw new RuntimeException("Couldn't find a species... Number is species in total is " + species.size()
-				+ ", and the total adjusted fitness is " + completeWeight);
+				+ ", and the total adjusted fitness is " + completeWeight); // this typically occurs when fitness is
+																			// negative
 	}
 
 	/**
@@ -219,8 +227,7 @@ public abstract class Evaluator {
 	 */
 	private Genome getRandomGenomeBiasedAdjustedFitness(Species selectFrom, Random random) {
 		double completeWeight = 0.0; // sum of probabilities of selecting each genome - selection is more probable
-										// for
-										// genomes with higher fitness
+										// for genomes with higher fitness
 		for (FitnessGenome fg : selectFrom.fitnessPop) {
 			completeWeight += fg.fitness;
 		}
@@ -232,7 +239,7 @@ public abstract class Evaluator {
 				return fg.genome;
 			}
 		}
-		throw new RuntimeException("Couldn't find a genome... Number is genomes in selected species is "
+		throw new RuntimeException("Couldn't find a genome... Number of genomes in selected species is "
 				+ selectFrom.fitnessPop.size() + ", and the total adjusted fitness is " + completeWeight);
 	}
 
@@ -261,7 +268,7 @@ public abstract class Evaluator {
 	 * @return list of genomes.
 	 */
 	public List<Genome> getGenomes() {
-		return genomes;
+		return genepool;
 	}
 
 	/**
@@ -311,9 +318,6 @@ public abstract class Evaluator {
 			this.totalAdjustedFitness += adjustedFitness;
 		}
 
-		/*
-		 * Selects new random mascot + clear members + set totaladjustedfitness to 0f
-		 */
 		/**
 		 * Selects new random mascot + clear members + set totaladjustedfitness to 0f
 		 * 
@@ -321,7 +325,10 @@ public abstract class Evaluator {
 		 */
 		public void reset(Random r) {
 			int newMascotIndex = r.nextInt(members.size());
-			this.mascot = members.get(newMascotIndex);
+//			this.mascot = members.get(newMascotIndex);
+			this.mascot = fitnessPop.get(0).genome; // was above. want to preserve best solutions and have clearly
+													// defined/consistent species boundaries given a stable centerpoint
+													// (fittestPop gets passed over to next generation)
 			members.clear();
 			fitnessPop.clear();
 			totalAdjustedFitness = 0f;
