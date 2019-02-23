@@ -1,5 +1,6 @@
 package jarhead;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -16,34 +17,33 @@ public class Network {
 	// buffer of all connections which is processed during forward propagation
 	private Stack<ConnectionGene> tmpConnections = new Stack<ConnectionGene>();
 	// connectionSignals which are used during processing from buffer
-	private Stack<ConnectionGene> buffer = new Stack<ConnectionGene>();
+	private List<ConnectionGene> buffer = new ArrayList<ConnectionGene>();
 	// values passed per forward propagation by depth
-	private ConcurrentHashMap<Integer, Float> signals = new ConcurrentHashMap<Integer, Float>();// should be size of
-														// gene.getNodeGenes
+	private ConcurrentHashMap<Integer, Float> signals = new ConcurrentHashMap<Integer, Float>();
 
 	private Genome genome;
 
 	public Network(Genome gene) {
 		this.genome = gene;
-		// size used until proper removal is implemented per depth
-
 	}
 
 	public List<Float> run(List<Float> sensors) {
 		// TODO: sort within constructor not each run.
-		tmpConnections.addAll(genome.getConnectionGenes().values().stream()
-				.filter(c -> c.isExpressed()).sorted((c1, c2) -> {
+		// sort connections by depth
+		tmpConnections
+				.addAll(genome.getConnectionGenes().values().stream().filter(c -> c.isExpressed()).sorted((c1, c2) -> {
 					return genome.getNodeGenes().get(c2.getOutNode()).getDepth()
 							- genome.getNodeGenes().get(c1.getOutNode()).getDepth();
 				}).collect(Collectors.toList()));
 
-		// setup DataStructures for forward propagation
+		// setup
 		buffer.addAll(
 				tmpConnections.stream().filter(c -> genome.getNodeGenes().get(c.getInNode()).getType() == TYPE.INPUT)
 						.collect(Collectors.toList()));
 		buffer.forEach(i -> signals.put(i.getInNode(), activate(sensors.get(i.getInNode()))));
 
-		tmpConnections.removeAll(buffer); // breaks initial topology
+		tmpConnections.removeAll(buffer);
+
 		if (sensors.size() != genome.getNodeGenes().values().stream().filter(n -> n.getType() == TYPE.INPUT).count()) {
 			System.out.println("ERROR: improper input to Network: " + this + "Expecting: "
 					+ genome.getNodeGenes().values().stream().filter(n -> n.getType() == TYPE.INPUT).count()
@@ -53,32 +53,25 @@ public class Network {
 
 		// Forward propagate
 		for (int i = 1; !buffer.isEmpty(); i++) {
+			// collect signals per node (multiply by weights and sum)
 			buffer.parallelStream().forEach(c -> {
 				signals.put(c.getOutNode(),
 						zeroIfNull(signals.get(c.getOutNode())) + signals.get(c.getInNode()) * c.getWeight());
 			});
 			buffer.clear();
-
-			while (!tmpConnections.isEmpty()
-					&& genome.getNodeGenes().get(tmpConnections.peek().getInNode()).getDepth() == i) {
-				buffer.add(tmpConnections.pop());
-			}
-
 			// activate all nodes of this depth
 			for (int n : signals.keySet()) {
 				if (genome.getNodeGenes().get(n).getDepth() == i) {
 					signals.put(n, activate(signals.get(n)));
-				}
-				else if (genome.getNodeGenes().get(n).getDepth() < i) {
-//					System.out.println("removing a signal...");
+				} else if (genome.getNodeGenes().get(n).getDepth() < i) {
 					signals.remove(n); // can this be called within iterator?
 				}
+			}
 
-				// why do all depth have same value
-//				System.out.println("In the loop with depth: " + i);
-//				signals.forEach((a, f) -> {
-//					System.out.println("SIGNAL: " + a + ": " + f);
-//				});
+			// get the next row (depth) of nodes
+			while (!tmpConnections.isEmpty()
+					&& genome.getNodeGenes().get(tmpConnections.peek().getInNode()).getDepth() == i) {
+				buffer.add(tmpConnections.pop());
 			}
 		}
 		// this is a patchwork solution
@@ -88,22 +81,10 @@ public class Network {
 						&& genome.getNodeGenes().get(n).getType() != TYPE.OUTPUT)
 				.forEach(n -> signals.remove(n));
 
-		// TESTING RETURN VALUE"
-//		sensors.forEach(s -> {
-//			System.out.println("INPUT: " + s);
-//		});
-//		signals.values().forEach(s -> {
-//			System.out.println("OUTPUT: " + s);
-//		});
-//		signals.keySet().forEach(k -> {
-//			System.out.print(k);
-//			System.out.println(" " + genome.getNodeGenes().get(k).getDepth());
-//		});
-		// TESTING RETURN VALUE
 		return signals.values().stream().collect(Collectors.toList());
 	}
 
-	public float activate(float f) { // will this overload for unboxing?
+	public float activate(float f) { 
 		return (float) (1f / (1f + Math.exp(-4.8f * f)));
 	}
 
