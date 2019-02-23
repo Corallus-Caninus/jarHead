@@ -10,14 +10,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.stream.Collectors;
 
 /**
  * Evaluator class.
  */
 
 public abstract class Evaluator {
-
-	private FitnessGenomeComparator fitComp = new FitnessGenomeComparator();
 
 	private Counter connectionInnovation;
 	private Counter nodeInnovation;
@@ -29,7 +28,7 @@ public abstract class Evaluator {
 	private float C2 = 1.0f;
 	private float C3 = 0.4f;
 //	private float DT = 10.0f;
-	private float DT = 30.0f;
+	private float DT = 20.0f;
 //	private float MUTATION_RATE = 0.5f;
 	private float MUTATION_RATE = 0.02f;
 //	private float ADD_CONNECTION_RATE = 0.7f;
@@ -62,8 +61,7 @@ public abstract class Evaluator {
 	 */
 	public Evaluator(int populationSize, Genome startingGenome, Counter connectionInnovation, Counter nodeInnovation) {
 		this.populationSize = populationSize;
-		this.connectionInnovation = connectionInnovation; // TODO: this should be its own object to prevent lost genomes
-															// from exploding innovation (not critical)
+		this.connectionInnovation = connectionInnovation;
 		this.nodeInnovation = nodeInnovation;
 
 		genepool = new ArrayList<Genome>(populationSize);
@@ -86,7 +84,7 @@ public abstract class Evaluator {
 	 * assign score 4.put best genomes from each species into next generation
 	 * 5.Breed the rest of the genomes
 	 */
-	public void evaluate() { // TODO: multi-thread these methods to speed up crossover/mutation.
+	public void evaluate() {
 		// Reset species for next generation
 		for (Species s : species) {
 			s.reset(random);
@@ -112,25 +110,17 @@ public abstract class Evaluator {
 				mappedSpecies.put(g, newSpecies);
 			}
 		}
-		System.out.println("Clearing unused species..");
-		// Remove unused species
-		Iterator<Species> iter = species.iterator();
-		while (iter.hasNext()) {
-			Species s = iter.next();
-			if (s.members.isEmpty()) {
-				iter.remove();
-			}
-		}
+
 		System.out.println("Evaluating genomes and assigning score");
 		// Evaluate genomes and assign score
 		for (Genome g : genepool) {
 			Species s = mappedSpecies.get(g); // Get species of the genome
 
 			float score = evaluateGenome(g);
-			float adjustedScore = score / mappedSpecies.get(g).members.size(); // explicit fitness sharing
+			float adjustedScore = score / mappedSpecies.get(g).members.size();
 
 			s.addAdjustedFitness(adjustedScore);
-			s.fitnessPop.add(new FitnessGenome(g, adjustedScore));
+			s.fitnessPop.put(adjustedScore, g);
 			scoreMap.put(g, adjustedScore);
 			if (score > highestScore) {
 				highestScore = score;
@@ -139,18 +129,24 @@ public abstract class Evaluator {
 		}
 
 		System.out.println("Placing best genomes into next generation..");
-		// TODO: fittestInSpecies gives nullPointerException (when fitness falls below
-		// 0). ensure species are removed appropriately and fittestGenome is passed on.
-		// something may be backwards in fitness
+		List<Species> unUsedSpecies = new ArrayList<Species>();
 		for (Species s : species) {
-			Collections.sort(s.fitnessPop, fitComp);
-			Collections.reverse(s.fitnessPop);
-			FitnessGenome fittestInSpecies = s.fitnessPop.get(0);
-			nextGenGenomes.add(fittestInSpecies.genome);
+			Optional<Float> speciesCheck = s.fitnessPop.keySet().parallelStream().sorted()
+					.max((a, b) -> a.compareTo(b));
+
+			if (speciesCheck.isPresent()) {
+				nextGenGenomes.add(s.fitnessPop.get(speciesCheck.get()));
+			} else {
+				unUsedSpecies.add(s);
+			}
 		}
+		System.out.println("Clearing unused species...");
+		species.removeAll(unUsedSpecies);
 
 		// Breed the rest of the genomes
-		while (nextGenGenomes.size() < populationSize) { // replace removed genomes by randomly breeding
+		System.out.println("Performing crossover..");
+		// TODO: build a species list and crossover in parallel
+		while (nextGenGenomes.size() < populationSize) {
 			Species s = getRandomSpeciesBiasedAjdustedFitness(random);
 
 			Genome p1 = getRandomGenomeBiasedAdjustedFitness(s, random);
@@ -158,7 +154,7 @@ public abstract class Evaluator {
 
 			Genome child;
 			if (scoreMap.get(p1) >= scoreMap.get(p2)) {
-				child = Genome.crossover(p1, p2, random); // TODO: need to handle when child is not possible.
+				child = Genome.crossover(p1, p2, random);
 			} else { // Is this due to innovation number?
 				child = Genome.crossover(p2, p1, random);
 			} // else they are equal so disjoint and excess genes must be randomized
@@ -181,9 +177,10 @@ public abstract class Evaluator {
 			// will fix max fragmentation but not gaps within innovation list. innovation
 			// list still has historical representation is just not an efficient counting
 			// method wrt crossover.
-			
+
 			// This may be a good point to add a global ConnectionGene
-			// List and redo all instances of SCAN GENOMES. this will lead naturally into A.S.
+			// List and redo all instances of SCAN GENOMES in topology mutation. this will
+			// lead naturally into A.S.
 		}
 
 		genepool = nextGenGenomes;
@@ -227,15 +224,15 @@ public abstract class Evaluator {
 	private Genome getRandomGenomeBiasedAdjustedFitness(Species selectFrom, Random random) {
 		double completeWeight = 0.0; // sum of probabilities of selecting each genome - selection is more probable
 										// for genomes with higher fitness
-		for (FitnessGenome fg : selectFrom.fitnessPop) {
-			completeWeight += fg.fitness;
+		for (Float fg : selectFrom.fitnessPop.keySet()) {
+			completeWeight += fg;
 		}
 		double r = Math.random() * completeWeight;
 		double countWeight = 0.0;
-		for (FitnessGenome fg : selectFrom.fitnessPop) {
-			countWeight += fg.fitness;
+		for (Float fg : selectFrom.fitnessPop.keySet()) {
+			countWeight += fg;
 			if (countWeight >= r) {
-				return fg.genome;
+				return selectFrom.fitnessPop.get(fg);
 			}
 		}
 		throw new RuntimeException("Couldn't find a genome... Number of genomes in selected species is "
@@ -281,6 +278,8 @@ public abstract class Evaluator {
 	/**
 	 * assigns a fitness to a given Genome.
 	 */
+//	TODO: why isnt this a HashMap? Maps are good.
+	// replace with HashMap
 	public class FitnessGenome {
 
 		float fitness;
@@ -297,20 +296,20 @@ public abstract class Evaluator {
 	}
 
 	/**
-	 * Species Constructor class.
+	 * Species class.
 	 */
 	public class Species {
 
 		public Genome mascot;
 		public List<Genome> members;
-		public List<FitnessGenome> fitnessPop;
+		public Map<Float, Genome> fitnessPop;
 		public float totalAdjustedFitness = 0f;
 
 		public Species(Genome mascot) {
 			this.mascot = mascot;
 			this.members = new LinkedList<Genome>();
 			this.members.add(mascot);
-			this.fitnessPop = new ArrayList<FitnessGenome>();
+			this.fitnessPop = new HashMap<Float, Genome>();
 		}
 
 		public void addAdjustedFitness(float adjustedFitness) {
@@ -323,32 +322,13 @@ public abstract class Evaluator {
 		 * @param r random seed.
 		 */
 		public void reset(Random r) {
-//			int newMascotIndex = r.nextInt(members.size());
-//			this.mascot = members.get(newMascotIndex);
-			this.mascot = fitnessPop.get(0).genome; // was above. want to preserve best solutions and have clearly
-													// defined/consistent species boundaries given a stable centerpoint
-													// (fittestPop gets passed over to next generation)
+			int newMascotIndex = r.nextInt(members.size());
+			this.mascot = members.get(newMascotIndex);
+
 			members.clear();
 			fitnessPop.clear();
 			totalAdjustedFitness = 0f;
 		}
-	}
-
-	/**
-	 * returns comparison of genomes implementing javaUtil.Comparator method.
-	 */
-	public class FitnessGenomeComparator implements Comparator<FitnessGenome> {
-
-		@Override
-		public int compare(FitnessGenome one, FitnessGenome two) {
-			if (one.fitness > two.fitness) {
-				return 1;
-			} else if (one.fitness < two.fitness) {
-				return -1;
-			}
-			return 0;
-		}
-
 	}
 
 	/**
