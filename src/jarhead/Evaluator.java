@@ -131,8 +131,7 @@ public abstract class Evaluator {
 		System.out.println("Placing best genomes into next generation..");
 		List<Species> unUsedSpecies = new ArrayList<Species>();
 		for (Species s : species) {
-			Optional<Float> speciesCheck = s.fitnessPop.keySet().parallelStream().sorted()
-					.max((a, b) -> a.compareTo(b));
+			Optional<Float> speciesCheck = s.fitnessPop.keySet().parallelStream().max((a, b) -> a.compareTo(b));
 
 			if (speciesCheck.isPresent()) {
 				nextGenGenomes.add(s.fitnessPop.get(speciesCheck.get()));
