@@ -155,7 +155,7 @@ public class Genome implements Serializable {
 				connectionImpossible = true;
 			} else if (node1.getType() == NodeGene.TYPE.OUTPUT && node2.getType() == NodeGene.TYPE.OUTPUT) {
 				connectionImpossible = true;
-			} else if(node1.getId() == node2.getId()) {
+			} else if (node1.getId() == node2.getId()) {
 				// cicularity models unfolded recurrent connections sufficiently
 				connectionImpossible = true;
 			}
@@ -217,18 +217,38 @@ public class Genome implements Serializable {
 		if (success == false) {
 //			System.out.println("DETECTED: maxAttempt reached, genome contains all possible connections!");
 		}
-		if (!this.setDepth()) {
-			System.out.println("BROKEN INSIDE CONNECTION MUTATION");
-		}
 	}
 
-	public int getMaxDepth() {
-		int depth;
-		depth = nodes.values().stream().sorted((n1, n0) -> {
-			return n0.getDepth() - n1.getDepth();
-		}).collect(Collectors.toList()).get(0).getDepth();
+	/**
+	 * Calculates the maximum number of connections possible for a given topology
+	 * (NodeGenes).
+	 * 
+	 * @return integer number of connections.
+	 */
+	public int maxConnections() {
+		int hiddenNodes, inputNodes, outputNodes, boundaryConnections;
+		int prev = 0, next = 0;
 
-		return depth;
+		hiddenNodes = (int) nodes.entrySet().parallelStream()
+				.filter(p -> p.getValue().getType() == NodeGene.TYPE.HIDDEN).count();
+		outputNodes = (int) nodes.entrySet().parallelStream()
+				.filter(p -> p.getValue().getType() == NodeGene.TYPE.OUTPUT).count();
+		inputNodes = (int) nodes.entrySet().parallelStream().filter(p -> p.getValue().getType() == NodeGene.TYPE.INPUT)
+				.count();
+		// first calculate possible connections with input and output (boundary) nodes
+		boundaryConnections = inputNodes * (hiddenNodes + outputNodes) + hiddenNodes * outputNodes;
+
+		// second calculate all possible connections within hidden nodes
+		if (hiddenNodes == 0) {
+			return boundaryConnections;
+		} else {
+			for (int i = 1; i <= hiddenNodes; i++) {
+				next = prev + (i - 1);
+				prev = next;
+			}
+			return next + boundaryConnections; // directed acyclic graph
+
+		}
 	}
 
 	/**
@@ -263,11 +283,9 @@ public class Genome implements Serializable {
 		// SCAN GENOMES//
 		for (Genome a : genomes) { // Both connections must be in same topology
 			ins = a.getConnectionGenes().values().parallelStream()
-					.filter(c -> c.getInNode() == con.getInNode() && c.isExpressed())
-					.collect(Collectors.toList());
-			outs = a.getConnectionGenes().values().parallelStream().filter(
-					c -> c.getOutNode() == con.getOutNode() && c.isExpressed())
-					.collect(Collectors.toList());
+					.filter(c -> c.getInNode() == con.getInNode() && c.isExpressed()).collect(Collectors.toList());
+			outs = a.getConnectionGenes().values().parallelStream()
+					.filter(c -> c.getOutNode() == con.getOutNode() && c.isExpressed()).collect(Collectors.toList());
 
 			for (ConnectionGene in : ins) {
 				Optional<ConnectionGene> match = outs.parallelStream().filter(o -> o.getInNode() == in.getOutNode())
@@ -383,38 +401,6 @@ public class Genome implements Serializable {
 	}
 
 	/**
-	 * Calculates the maximum number of connections possible for a given topology
-	 * (NodeGenes).
-	 * 
-	 * @return integer number of connections.
-	 */
-	public int maxConnections() {
-		int hiddenNodes, inputNodes, outputNodes, boundaryConnections;
-		int prev = 0, next = 0;
-
-		hiddenNodes = (int) nodes.entrySet().parallelStream()
-				.filter(p -> p.getValue().getType() == NodeGene.TYPE.HIDDEN).count();
-		outputNodes = (int) nodes.entrySet().parallelStream()
-				.filter(p -> p.getValue().getType() == NodeGene.TYPE.OUTPUT).count();
-		inputNodes = (int) nodes.entrySet().parallelStream().filter(p -> p.getValue().getType() == NodeGene.TYPE.INPUT)
-				.count();
-		// first calculate possible connections with input and output (boundary) nodes
-		boundaryConnections = inputNodes * (hiddenNodes + outputNodes) + hiddenNodes * outputNodes;
-
-		// second calculate all possible connections within hidden nodes
-		if (hiddenNodes == 0) {
-			return boundaryConnections;
-		} else {
-			for (int i = 1; i <= hiddenNodes; i++) {
-				next = prev + (i - 1);
-				prev = next;
-			}
-			return next + boundaryConnections; // directed acyclic graph
-
-		}
-	}
-
-	/**
 	 * Assigns depth to a genome. Ensures all nodes have minimum amounts of
 	 * connections and no circularity is present
 	 * 
@@ -429,8 +415,7 @@ public class Genome implements Serializable {
 		});
 
 		// filter unexpressed connections
-		buffer = connections.values().parallelStream().filter(c -> c.isExpressed())
-				.collect(Collectors.toList());
+		buffer = connections.values().parallelStream().filter(c -> c.isExpressed()).collect(Collectors.toList());
 
 		// check hanging inNodes
 		if (!buffer.parallelStream().map(c -> c.getInNode()).collect(Collectors.toList())
@@ -483,6 +468,15 @@ public class Genome implements Serializable {
 		}
 
 		return true;
+	}
+
+	public int getMaxDepth() {
+		int depth;
+		depth = nodes.values().stream().sorted((n1, n0) -> {
+			return n0.getDepth() - n1.getDepth();
+		}).collect(Collectors.toList()).get(0).getDepth();
+
+		return depth;
 	}
 
 }
