@@ -1,6 +1,7 @@
 package jarhead;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -30,12 +31,9 @@ public class Network {
 	public List<Float> run(List<Float> sensors) {
 		// TODO: sort within constructor not each run.
 		// sort connections by depth
-		tmpConnections
-				.addAll(genome.getConnectionGenes().values().stream().filter(c -> c.isExpressed()).sorted((c1, c2) -> {
-					return genome.getNodeGenes().get(c2.getInNode()).getDepth()
-							- genome.getNodeGenes().get(c1.getInNode()).getDepth();
-				}).collect(Collectors.toList()));
-		
+		tmpConnections.addAll(genome.getConnectionGenes().values().stream().filter(c -> c.isExpressed())
+				.sorted(connectionsSortByDepth).collect(Collectors.toList()));
+
 		// setup
 		buffer.addAll(
 				tmpConnections.stream().filter(c -> genome.getNodeGenes().get(c.getInNode()).getType() == TYPE.INPUT)
@@ -52,7 +50,7 @@ public class Network {
 		}
 
 		// Forward propagate
-		for (int i = 1; !buffer.isEmpty(); i++) { 
+		for (int i = 1; !buffer.isEmpty(); i++) {
 			// collect signals per node (multiply by weights and sum)
 			buffer.parallelStream().forEach(c -> {
 				signals.put(c.getOutNode(),
@@ -74,8 +72,6 @@ public class Network {
 				buffer.add(tmpConnections.pop());
 			}
 		}
-		signals.values().forEach(s -> System.out.println(s));
-		System.out.println("NEXT");
 
 		return signals.values().stream().collect(Collectors.toList());
 	}
@@ -88,4 +84,12 @@ public class Network {
 	private static Float zeroIfNull(Float val) {
 		return (val == null) ? 0 : val;
 	}
+
+	Comparator<ConnectionGene> connectionsSortByDepth = new Comparator<ConnectionGene>() {
+		@Override
+		public int compare(ConnectionGene c1, ConnectionGene c2) {
+			return genome.getNodeGenes().get(c2.getInNode()).getDepth()
+					- genome.getNodeGenes().get(c1.getInNode()).getDepth();
+		}
+	};
 }
