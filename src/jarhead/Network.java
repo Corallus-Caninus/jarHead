@@ -12,13 +12,13 @@ import jarhead.NodeGene.TYPE;
 // Therefore only need to implement Cyclic connections with activated method.
 // implement activated here with cyclic additions.
 
-// TODO: can this entire method be one call to a parallel stream over buffer? (immutable no exposed tmpConnections or buffer)
+// TODO: can this entire method be one call to a parallel stream over buffer? (immutable no tmpConnections or buffer)
 public class Network {
 	// buffer of all connections which is processed during forward propagation
 	private Stack<ConnectionGene> tmpConnections = new Stack<ConnectionGene>();
 	// connectionSignals which are used during processing from buffer
 	private List<ConnectionGene> buffer = new ArrayList<ConnectionGene>();
-	// values passed per forward propagation by depth
+	// values passed each depth during forward propagation
 	private ConcurrentHashMap<Integer, Float> signals = new ConcurrentHashMap<Integer, Float>();
 
 	private Genome genome;
@@ -32,10 +32,10 @@ public class Network {
 		// sort connections by depth
 		tmpConnections
 				.addAll(genome.getConnectionGenes().values().stream().filter(c -> c.isExpressed()).sorted((c1, c2) -> {
-					return genome.getNodeGenes().get(c2.getOutNode()).getDepth()
-							- genome.getNodeGenes().get(c1.getOutNode()).getDepth();
+					return genome.getNodeGenes().get(c2.getInNode()).getDepth()
+							- genome.getNodeGenes().get(c1.getInNode()).getDepth();
 				}).collect(Collectors.toList()));
-
+		
 		// setup
 		buffer.addAll(
 				tmpConnections.stream().filter(c -> genome.getNodeGenes().get(c.getInNode()).getType() == TYPE.INPUT)
@@ -52,7 +52,7 @@ public class Network {
 		}
 
 		// Forward propagate
-		for (int i = 1; !buffer.isEmpty(); i++) {
+		for (int i = 1; !buffer.isEmpty(); i++) { 
 			// collect signals per node (multiply by weights and sum)
 			buffer.parallelStream().forEach(c -> {
 				signals.put(c.getOutNode(),
@@ -74,17 +74,13 @@ public class Network {
 				buffer.add(tmpConnections.pop());
 			}
 		}
-		// this is a patchwork solution
-		signals.keySet().stream()
-				.filter(n -> !tmpConnections.stream().map(c -> c.getInNode()).collect(Collectors.toList()).contains(n)
-						&& !tmpConnections.stream().map(c -> c.getOutNode()).collect(Collectors.toList()).contains(n)
-						&& genome.getNodeGenes().get(n).getType() != TYPE.OUTPUT)
-				.forEach(n -> signals.remove(n));
+		signals.values().forEach(s -> System.out.println(s));
+		System.out.println("NEXT");
 
 		return signals.values().stream().collect(Collectors.toList());
 	}
 
-	public float activate(float f) { 
+	public float activate(float f) {
 		return (float) (1f / (1f + Math.exp(-4.8f * f)));
 	}
 
