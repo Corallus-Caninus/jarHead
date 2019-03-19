@@ -11,7 +11,6 @@ import java.util.Random;
 import java.util.stream.Collectors;
 
 import jarhead.NodeGene.TYPE;
-import jarhead.neat.NetworkPrinter;
 
 import java.io.*;
 
@@ -28,8 +27,8 @@ public class Genome implements Serializable {
 	private static final long serialVersionUID = 129348938L;
 
 	private final float PROBABILITY_PERTURBING = 0.9f; // TODO: move this up to evaluator with the rest of the
-														// hyperparameters verify with k.stanley on the importance and
-														// variation of this value
+			 				// hyperparameters verify with k.stanley on the importance and
+							// variation of this value
 
 	private Map<Integer, ConnectionGene> connections; // Integer map key is equivalent to connection innovation
 	private Map<Integer, NodeGene> nodes; // Integer map key is equivalent to node innovation aka node ID
@@ -181,13 +180,12 @@ public class Genome implements Serializable {
 				}
 			}
 
-			// local ConnectionGene check
 			if (connectionImpossible) {
 				continue;
 			}
 			if (connectionExists) {
 				tries++; // if connectionExists then try++ once for each existing connection. if
-							// connectionImpossible dont increase tries
+					// connectionImpossible dont increase tries
 				continue;
 			}
 
@@ -207,7 +205,7 @@ public class Genome implements Serializable {
 
 			connections.put(newCon.getInnovation(), newCon);
 
-			if (!this.setDepth()) {
+			if (!this.setDepth()) { // if connection is recurrent search again
 				connections.remove(newCon.getInnovation());
 				this.setDepth();
 			} else {
@@ -331,8 +329,8 @@ public class Genome implements Serializable {
 					+ newToOut.getInNode() + "->" + newToOut.getOutNode());
 			System.out.println(this);
 
-			NetworkPrinter testing = new NetworkPrinter(this);
-			testing.displayGraph();
+			//NetworkPrinter testing = new NetworkPrinter(this);
+			//testing.displayGraph();
 
 			System.out.println("\n\n IMPOSSIBLE \n\n");
 		}

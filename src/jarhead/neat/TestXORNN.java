@@ -8,7 +8,6 @@ import java.util.stream.Collectors;
 
 import jarhead.ConnectionGene;
 import jarhead.Genome;
-import jarhead.OldNetwork;
 import jarhead.Network;
 import jarhead.NodeGene;
 import jarhead.NodeGene.TYPE;
@@ -147,8 +146,8 @@ public class TestXORNN {
 					values.clear();
 				}
 
-				NetworkPrinter testing = new NetworkPrinter(eva.getFittestGenome());
-				testing.displayGraph();
+				//NetworkPrinter testing = new NetworkPrinter(eva.getFittestGenome());
+				//testing.displayGraph();
 			}
 			System.out.print("\n");
 		}
@@ -168,7 +167,7 @@ public class TestXORNN {
 			values.clear();
 		}
 
-		NetworkPrinter testing = new NetworkPrinter(eva.getFittestGenome());
-		testing.displayGraph();
+		//NetworkPrinter testing = new NetworkPrinter(eva.getFittestGenome());
+		//testing.displayGraph();
 	}
 }

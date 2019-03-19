@@ -27,11 +27,8 @@ public abstract class Evaluator {
 	private float C1 = 1.0f; // why is probability perturbing not included here?
 	private float C2 = 1.0f;
 	private float C3 = 0.4f;
-//	private float DT = 10.0f;
 	private float DT = 20.0f;
-//	private float MUTATION_RATE = 0.5f;
 	private float MUTATION_RATE = 0.02f;
-//	private float ADD_CONNECTION_RATE = 0.7f;
 	private float ADD_CONNECTION_RATE = 0.02f;
 	private float ADD_NODE_RATE = 0.01f;
 
@@ -90,7 +87,7 @@ public abstract class Evaluator {
 			s.reset(random);
 		}
 		scoreMap.clear();
-		mappedSpecies.clear();
+		mappedSpecies.clear(); //would prefer to use species.members instead.
 		nextGenGenomes.clear();
 		highestScore = Float.MIN_VALUE;
 		fittestGenome = null;
@@ -207,7 +204,7 @@ public abstract class Evaluator {
 				return s;
 			}
 		}
-		throw new RuntimeException("Couldn't find a species... Number is species in total is " + species.size()
+		throw new RuntimeException("Couldn't find a species... Number of species in total is " + species.size()
 				+ ", and the total adjusted fitness is " + completeWeight); // this typically occurs when fitness is
 																			// negative
 	}
@@ -273,27 +270,6 @@ public abstract class Evaluator {
 	 */
 	protected abstract float evaluateGenome(Genome genome); // protected: must be called inside subclass and abstract:
 															// implemented with @Override method
-
-	/**
-	 * assigns a fitness to a given Genome.
-	 */
-//	TODO: why isnt this a HashMap? Maps are good.
-	// replace with HashMap
-	public class FitnessGenome {
-
-		float fitness;
-		Genome genome;
-
-		/**
-		 * @param genome  genome to be assigned.
-		 * @param fitness fitness to assign.
-		 */
-		public FitnessGenome(Genome genome, float fitness) {
-			this.genome = genome;
-			this.fitness = fitness;
-		}
-	}
-
 	/**
 	 * Species class.
 	 */
