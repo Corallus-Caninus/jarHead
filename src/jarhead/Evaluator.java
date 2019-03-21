@@ -209,7 +209,7 @@ public abstract class Evaluator {
 		}
 		throw new RuntimeException("Couldn't find a species... Number of species in total is " + species.size()
 				+ ", and the total adjusted fitness is " + completeWeight); // this typically occurs when fitness is
-																			// negative
+											    // negative
 	}
 
 	/**

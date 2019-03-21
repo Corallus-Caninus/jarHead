@@ -2,12 +2,10 @@ package jarhead;
 import java.util.*;
 
 public class PointOfMutation{
-	public HashMap<Integer, ConnectionGene> innovationGenes; //make this genome instead. too verbose. use both because why not.
-       								 //use genome.getConnectionGenes for innovationGenes
+	public HashMap<Integer, ConnectionGene> innovationGenes;
 	public Genome mascot;
 	public Float highScore;
 	public List<Genome> members;
-	//need mascot for respawn
 	
 	//Constructor
 	public PointOfMutation(float initialScore, Genome newGenome){	
