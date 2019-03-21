@@ -13,22 +13,25 @@ public class Ancestors{
 	//constructor (called in Evaluator constructor)
 	public Ancestors(Genome initialGenome){ //initial genome==Species.mascot;
 		novelInnovationList = new HashMap<Integer, ConnectionGene>();
-		POMs = new HashMap<PointOfMutation, Integer>();
+		POMs = new HashMap<PointOfMutation, Integer>();//Integer is for AncestryTree lineage
 		
 		novelInnovationList.putAll(initialGenome.getConnectionGenes());
 		POMs.put(new PointOfMutation(0f, initialGenome), 0);//initial PoM
 	}
 	//1.CALLED AT COMPATABILITYDISTANCE
-	public void assignPOM(Genome assignGenome){
+	public void migrate(List<Genome> genepool){
 	//migration and placement of genomes.
-		PointOfMutation match = POMs.entrySet().stream().sorted((p1,p2)->p2.getValue().compareTo(p1.getValue()))
-				      .filter(p->assignGenome.getConnectionGenes().keySet()
-				      	     .containsAll(p.getKey().innovationGenes.keySet()))
-				      .findFirst().get().getKey();
-		match.members.add(assignGenome); //defaults to initial POM(initGenome)
+		swapOut();//always called anyways
+		for(Genome assignGenome : genepool){
+			PointOfMutation match = POMs.entrySet().stream().sorted((e1,e2)->e2.getValue().compareTo(e1.getValue()))
+				      	.filter(e->assignGenome.getConnectionGenes().keySet()
+					      	     .containsAll(e.getKey().innovationGenes.keySet()))
+				        .findFirst().get().getKey();
+			match.members.add(assignGenome); //defaults to initial POM(initGenome)
+		}
 	}
-	//2.CALLED AFTER EVALUATION AND ASSIGNPOM
-	public boolean speciate(Map<Genome, Float> scoreMap){
+	//2.CALLED AFTER EVALUATION 
+	public void speciate(Map<Genome, Float> scoreMap){
 		boolean branched = false;
 		for(PointOfMutation checkPOM : POMs.keySet()){
 			Optional<Genome> match = checkPOM.members.stream().filter(g->scoreMap.get(g) > checkPOM.highScore)
@@ -37,15 +40,18 @@ public class Ancestors{
 			if(match.isPresent()){
 				PointOfMutation addition = new PointOfMutation(scoreMap.get(match.get()), match.get());
 				POMs.put(addition, POMs.get(checkPOM)+1);
-				//remove all innovations found in matching genome
-				for(Integer innovation : match.get().getConnectionGenes().keySet()){//slow
+				//remove all innovations found in matching genome (HashMap method)
+				for(Integer innovation : match.get().getConnectionGenes().keySet()){
 					if(novelInnovationList.containsKey(innovation))
 						novelInnovationList.remove(innovation);
 				}
 			        branched = true;
 			}
 		}
-		return branched;//used to call assignPOM again for migration to new POM
+		//consider new POMs for migration
+		if(branched){
+			migrate(scoreMap.keySet().stream().collect(Collectors.toList()));
+		}
 	}
 	//3.CALLED AFTER CROSSOVER if epsilon-stagnation in crossover s.t. nextGenGenome.size()<population.size()
 	public PointOfMutation swapIn(Random r){
@@ -56,24 +62,26 @@ public class Ancestors{
 					   .collect(Collectors.toList()).get(r.nextInt()).getKey();
 		return swap;//add mutated mascot till nextGenGenome.size()==population.size()
 	}
-	//4.CALLED AFTER CROSSOVER AND SWAPIN
-	public void swapOut(){
-		//TODO: only call when members.isEmpty() to alleviate assignPOM
-		for(PointOfMutation swap : POMs.keySet()){
-			swap.members.clear();
-		}
-	}
-	//5.CALLED second AFTER CROSSOVER
+	//4.CALLED AFTER CROSSOVER (swapin doesnt matter as POMs are persistent)
 	public void updateInnovations(List<Genome> nextGenGenomes){
 		//add all new ConnectionsGenes
 		novelInnovationList.putAll(
 				nextGenGenomes.stream().flatMap(g->g.getConnectionGenes().values().stream())
+					      //not already in novelInnovationList
 					      .filter(c->!novelInnovationList.keySet().contains(c.getInnovation()))
+					      //innovation is not consumed in a niche
 					      .filter(c->!POMs.keySet().stream()
 						      	.map(p->p.innovationGenes)
 							.collect(Collectors.toList())
 							.contains(c.getInnovation()))
 					      .collect(Collectors.toMap(c->c.getInnovation(),c->c))
-					);
+					  );
+	}
+	//CALLED IN MIGRATE
+	private void swapOut(){
+		//TODO: only call when members.isEmpty() to alleviate assignPOM
+		for(PointOfMutation swap : POMs.keySet()){
+			swap.members.clear();
+		}
 	}
 }
