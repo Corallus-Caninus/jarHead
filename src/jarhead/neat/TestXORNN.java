@@ -13,6 +13,9 @@ import jarhead.NodeGene;
 import jarhead.NodeGene.TYPE;
 import jarhead.Counter;
 import jarhead.Evaluator;
+import jarhead.Chromosome;
+import jarhead.Ancestors;
+import jarhead.PointOfMutation;
 
 /**
  * 
@@ -116,6 +119,12 @@ public class TestXORNN {
 //				return totalDistance;
 			}
 		};
+		//CHROMOSOME TEST
+		Ancestors innovationHistory = new Ancestors(eva.getFittestGenome());
+		innovationHistory.updateInnovations(eva.getGenomes());
+		System.exit(0);
+		//	
+
 		for (int i = 0; i < 200; i++) {
 			eva.evaluate();
 

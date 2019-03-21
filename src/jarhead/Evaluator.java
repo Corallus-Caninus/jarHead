@@ -143,8 +143,11 @@ public abstract class Evaluator {
 		System.out.println("Performing crossover..");
 		// TODO: build a species list and crossover in parallel
 		while (nextGenGenomes.size() < populationSize) {
+			// call getRandomPoMBiasedInnovationDensity
 			Species s = getRandomSpeciesBiasedAjdustedFitness(random);
-
+			
+			// call getRandomGenomeBiasedAdjustedFitness
+			// 	-change totalAdjustedFitness to relativeFitness
 			Genome p1 = getRandomGenomeBiasedAdjustedFitness(s, random);
 			Genome p2 = getRandomGenomeBiasedAdjustedFitness(s, random);
 

@@ -38,7 +38,7 @@ public class Genome implements Serializable {
 	 */
 	public Genome() {
 		nodes = new HashMap<Integer, NodeGene>();
-		connections = new HashMap<Integer, ConnectionGene>(); // why HashMap.
+		connections = new HashMap<Integer, ConnectionGene>(); 
 	}
 
 	/**
