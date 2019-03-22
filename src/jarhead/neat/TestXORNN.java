@@ -75,7 +75,7 @@ public class TestXORNN {
 		}
 
 		List<Float> newList = new LinkedList<Float>();
-		Evaluator eva = new Evaluator(10000, parent2, connectionInnovation, nodeInnovation) {
+		Evaluator eva = new Evaluator(100, parent2, connectionInnovation, nodeInnovation) {
 			@Override
 			public float evaluateGenome(Genome g) {
 //				NeuralNetwork net = new NeuralNetwork(g);
@@ -119,28 +119,15 @@ public class TestXORNN {
 //				return totalDistance;
 			}
 		};
-		//CHROMOSOME TEST
-		Ancestors innovationHistory = new Ancestors(eva.getFittestGenome());
-		innovationHistory.updateInnovations(eva.getGenomes());
-		System.exit(0);
-		//	
 
 		for (int i = 0; i < 200; i++) {
 			eva.evaluate();
 
 			System.out.println("Generation: " + i);
-			System.out.println("\tHighest fitness: " + df.format(eva.getHighestFitness()));
-//			System.out.println("\tAmount of genomes: "+eva.getGenomeAmount());
-			System.out.print("Generation: " + i);
-			System.out.print("\tHighest fitness: " + eva.getHighestFitness());
-			System.out.print("\tAmount of species: " + eva.getSpeciesAmount());
-			System.out.print(
-					"\tConnections in best performer: " + eva.getFittestGenome().getConnectionGenes().values().size());
-			System.out.println("Highest innovation number: "
-					+ eva.getFittestGenome().getConnectionGenes().values().stream().map(c -> c.getInnovation())
-							.sorted((a, b) -> b.compareTo(a)).collect(Collectors.toList()).get(0));
+			System.out.println("Generation: " + i);
+			System.out.print("Highest Score: " + eva.getHighestScore());
 
-			if(eva.getHighestFitness() >= 4.0f) {
+			if(eva.getHighestScore() >= 4.0f) {
 				System.out.println("BEST RUN: ");
 				Network bnet = new Network(eva.getFittestGenome());
 				for (int l = 0; l < input.length; l++) {

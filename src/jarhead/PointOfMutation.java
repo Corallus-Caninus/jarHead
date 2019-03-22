@@ -8,7 +8,7 @@ public class PointOfMutation{
 	public List<Genome> members;
 	
 	//Constructor
-	public PointOfMutation(float score, Genome newGenome){	
+	public PointOfMutation(Float score, Genome newGenome){	
 		mascot = new Genome(newGenome);//copy as genomes may be removed. this is historic so must be non-volatile
 		innovationGenes = new HashMap<Integer, ConnectionGene>(); //copy " "
 		innovationGenes.putAll(newGenome.getConnectionGenes());

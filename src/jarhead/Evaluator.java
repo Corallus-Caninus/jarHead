@@ -1,16 +1,17 @@
 package jarhead;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Random;
-import java.util.stream.Collectors;
+//import java.util.ArrayList;
+//import java.util.Collections;
+//import java.util.Comparator;
+//import java.util.HashMap;
+//import java.util.Iterator;
+//import java.util.LinkedList;
+//import java.util.List;
+//import java.util.Map;
+//import java.util.Optional;
+//import java.util.Random;
+import java.util.stream.*;
+import java.util.*;
 
 /**
  * Evaluator class.
@@ -24,22 +25,22 @@ public abstract class Evaluator {
 	private Random random = new Random();
 
 	/* Constants for tuning */
-	private float C1 = 1.0f; // why is probability perturbing not included here?
-	private float C2 = 1.0f;
-	private float C3 = 0.4f;
-	private float DT = 20.0f;
+//	private float C1 = 1.0f; // why is probability perturbing not included here?
+//	private float C2 = 1.0f;
+//	private float C3 = 0.4f;
+//	private float DT = 20.0f;
 	private float MUTATION_RATE = 0.02f;
-	private float ADD_CONNECTION_RATE = 0.02f;
-	private float ADD_NODE_RATE = 0.01f;
+	private float ADD_CONNECTION_RATE = 0.2f;
+	private float ADD_NODE_RATE = 0.1f;
 
 	private int populationSize;
 
 	private List<Genome> genepool;
 	private List<Genome> nextGenGenomes;
+	
+	private Ancestors lineage;
+	private Integer prevResource, nextResource = null;
 
-	private List<Species> species;
-
-	private Map<Genome, Species> mappedSpecies;
 	private Map<Genome, Float> scoreMap;
 	private float highestScore;
 	private Genome fittestGenome;
@@ -62,6 +63,7 @@ public abstract class Evaluator {
 		this.nodeInnovation = nodeInnovation;
 
 		genepool = new ArrayList<Genome>(populationSize);
+		lineage = new Ancestors(startingGenome);
 
 		// randomize initial weights as per stanley
 		for (int i = 0; i < populationSize; i++) {
@@ -69,9 +71,7 @@ public abstract class Evaluator {
 			genepool.add(new Genome(startingGenome));
 		}
 		nextGenGenomes = new ArrayList<Genome>(populationSize);
-		mappedSpecies = new HashMap<Genome, Species>();
 		scoreMap = new HashMap<Genome, Float>();
-		species = new ArrayList<Species>();
 	}
 
 	/**
@@ -83,73 +83,41 @@ public abstract class Evaluator {
 	 */
 	public void evaluate() {
 		// Reset species for next generation
-		for (Species s : species) {
-			s.reset(random);
-		}
+
 		scoreMap.clear();
-		mappedSpecies.clear(); //would prefer to use species.members instead.
 		nextGenGenomes.clear();
 		highestScore = Float.MIN_VALUE;
 		fittestGenome = null;
 
 		// Place genomes into species
 		System.out.println("Placing genomes into species..");
-		for (Genome g : genepool) {
-			Optional<Species> match = species.parallelStream()
-					.filter(s -> Chromosome.compatibilityDistance(g, s.mascot, C1, C2, C3) < DT).findAny();
-
-			if (match.isPresent()) {
-				match.get().members.add(g);
-				mappedSpecies.put(g, match.get());
-			} else {
-				Species newSpecies = new Species(g);
-				species.add(newSpecies);
-				mappedSpecies.put(g, newSpecies);
-			}
-		}
+		lineage.migrate(genepool);//does migrate need to be called? private?
+		System.out.println("Total number of species.. " + lineage.POMs);
 
 		System.out.println("Evaluating genomes and assigning score");
 		// Evaluate genomes and assign score
 		for (Genome g : genepool) {
-			Species s = mappedSpecies.get(g); // Get species of the genome
-
 			float score = evaluateGenome(g);
-			float adjustedScore = score / mappedSpecies.get(g).members.size();
-
-			s.addAdjustedFitness(adjustedScore);
-			s.fitnessPop.put(adjustedScore, g);
-			scoreMap.put(g, adjustedScore);
-			if (score > highestScore) {
+			if(highestScore < score)
 				highestScore = score;
-				fittestGenome = g;
-			}
+			scoreMap.put(g, score);
 		}
+		lineage.speciate(scoreMap);
 
 		System.out.println("Placing best genomes into next generation..");
-		List<Species> unUsedSpecies = new ArrayList<Species>();
-		for (Species s : species) {
-			Optional<Float> speciesCheck = s.fitnessPop.keySet().parallelStream().max((a, b) -> a.compareTo(b));
-
-			if (speciesCheck.isPresent()) {
-				nextGenGenomes.add(s.fitnessPop.get(speciesCheck.get()));
-			} else {
-				unUsedSpecies.add(s);
-			}
-		}
-		System.out.println("Clearing unused species...");
-		species.removeAll(unUsedSpecies);
-
+		
 		// Breed the rest of the genomes
 		System.out.println("Performing crossover..");
-		// TODO: build a species list and crossover in parallel
+		//TODO: build a species list and crossover in parallel
+		//TODO: limit per POM based on increase in fitness.
+		//	(Epsilon-stagnation of resources/niche)
 		while (nextGenGenomes.size() < populationSize) {
 			// call getRandomPoMBiasedInnovationDensity
-			Species s = getRandomSpeciesBiasedAjdustedFitness(random);
-			
+			PointOfMutation PoM = getRandomPOMBiasedFitness(lineage, random);
 			// call getRandomGenomeBiasedAdjustedFitness
 			// 	-change totalAdjustedFitness to relativeFitness
-			Genome p1 = getRandomGenomeBiasedAdjustedFitness(s, random);
-			Genome p2 = getRandomGenomeBiasedAdjustedFitness(s, random);
+			Genome p1 = getRandomGenomeBiasedFitness(PoM, scoreMap, random);
+			Genome p2 = getRandomGenomeBiasedFitness(PoM, scoreMap, random);
 
 			Genome child;
 			if (scoreMap.get(p1) >= scoreMap.get(p2)) {
@@ -181,141 +149,107 @@ public abstract class Evaluator {
 			// List and redo all instances of SCAN GENOMES in topology mutation. this will
 			// lead naturally into A.S.
 		}
+		if(nextGenGenomes.size() < populationSize){
+			PointOfMutation respawn = lineage.swapIn(random);
+			while(nextGenGenomes.size() < populationSize){
+				respawn.members.add(respawn.mascot); //TODO: mutate mascot weights
+			}
+		}
+		
+		lineage.updateInnovations(nextGenGenomes);
 
 		genepool = nextGenGenomes;
 		nextGenGenomes = new ArrayList<Genome>();
 	}
 
 	/**
-	 * Selects a random species from the species list, where species with a higher
-	 * total adjusted fitness have a higher chance of being selected
+	 * Select a random PointOfMutation from the Ancestors list biased towards
+	 * POMs with higher score values.
 	 * 
 	 * @param random random seed.
 	 * @return randomly selected species.
 	 */
-	private Species getRandomSpeciesBiasedAjdustedFitness(Random random) {
+	private PointOfMutation getRandomPOMBiasedFitness(Ancestors lineage, Random random) {
 		double completeWeight = 0.0; // sum of probabilities of selecting each species - selection is more probable
 										// for species with higher fitness
-		for (Species s : species) {
-			completeWeight += s.totalAdjustedFitness;
-		}
+		// filter out empty POMs as they arent considered here	
+		List<PointOfMutation> filteredPOMs = lineage.POMs.keySet().stream()
+							 .filter(p->!p.members.isEmpty())
+							 .collect(Collectors.toList());
+		completeWeight = filteredPOMs.stream()
+					     .map(p->p.highScore)
+					     .reduce(0f, (s1,s2)-> s1+s2);
 		double r = Math.random() * completeWeight;
 		double countWeight = 0.0;
-		for (Species s : species) {
-			countWeight += s.totalAdjustedFitness;
-			if (countWeight >= r) {
-				return s;
+		//POMs sorted by score to bias towards higher scores.
+		for (PointOfMutation p : filteredPOMs.stream()
+						     .sorted((p1,p2)->p1.highScore.compareTo(p2.highScore))
+						     .collect(Collectors.toList())) {
+			countWeight += p.highScore;
+			if(countWeight >= r){
+				return p;
 			}
 		}
-		throw new RuntimeException("Couldn't find a species... Number of species in total is " + species.size()
-				+ ", and the total adjusted fitness is " + completeWeight); // this typically occurs when fitness is
-											    // negative
+		throw new RuntimeException("Couldn't find a PointOfMutation..." 
+				+ ", and the total score is " + completeWeight);
 	}
-
 	/**
-	 * Selects a random genome from the species chosen, where genomes with a higher
-	 * adjusted fitness have a higher chance of being selected
+	 * Select a random Genome from a PointOfMutation biased towards fitness.
 	 * 
 	 * @param selectFrom species to select Genome from.
 	 * @param random     random seed.
 	 * @return selected genome.
 	 */
-	private Genome getRandomGenomeBiasedAdjustedFitness(Species selectFrom, Random random) {
+	private Genome getRandomGenomeBiasedFitness(PointOfMutation selectFrom, Map<Genome, Float> scoreMap, Random random) {
 		double completeWeight = 0.0; // sum of probabilities of selecting each genome - selection is more probable
 										// for genomes with higher fitness
-		for (Float fg : selectFrom.fitnessPop.keySet()) {
-			completeWeight += fg;
+		for (Genome g : selectFrom.members) {
+			completeWeight += scoreMap.get(g);
 		}
 		double r = Math.random() * completeWeight;
 		double countWeight = 0.0;
-		for (Float fg : selectFrom.fitnessPop.keySet()) {
-			countWeight += fg;
+		for (Genome g : selectFrom.members) {
+			countWeight += scoreMap.get(g);
 			if (countWeight >= r) {
-				return selectFrom.fitnessPop.get(fg);
+				return g;
 			}
 		}
-		throw new RuntimeException("Couldn't find a genome... Number of genomes in selected species is "
-				+ selectFrom.fitnessPop.size() + ", and the total adjusted fitness is " + completeWeight);
+		throw new RuntimeException("Couldn't find a genome... PointOfMutation is " + selectFrom + 
+				 "total adjusted fitness is " + completeWeight);
+	}
+	// epsilon greedy resource stagnation
+	private int ScarcityofResources(int population) {
+		Float rate;
+		if(prevResource == null){
+			prevResource = 1;
+		}
+		nextResource = (int) Math.ceil(scoreMap.values().stream()
+							        .reduce(0f, (v1,v2)-> v1+v2));
+		if(nextResource < 0){
+			System.out.println("ERROR: genepool scoremap is less than 0..");
+			System.exit(0);
+		}
+
+		rate = (float) nextResource/prevResource;
+		//would rather use derivative to tune population reduction.
+		//if(rate < 0){
+		if(rate < 1){
+			return (int) Math.ceil(population * rate); //reduce population by this amount
+		}else{
+			prevResource = nextResource;
+			return population;
+		}
 	}
 
-	/**
-	 * @return size of species.
-	 */
-	public int getSpeciesAmount() {
-		return species.size();
-	}
-
-	/**
-	 * @return highest score.
-	 */
-	public float getHighestFitness() {
+	protected abstract float evaluateGenome(Genome genome); // protected: must be called inside subclass and abstract:
+								// implemented with @Override method
+	public float getHighestScore(){
 		return highestScore;
 	}
 
-	/**
-	 * @return genome with highest fitness.
-	 */
-	public Genome getFittestGenome() {
-		return fittestGenome;
-	}
-
-	/**
-	 * @return list of genomes.
-	 */
-	public List<Genome> getGenomes() {
-		return genepool;
-	}
-
-	/**
-	 * Uses @Override method to instantiate a fitness function.
-	 * 
-	 * @param genome genome to be evaluated.
-	 */
-	protected abstract float evaluateGenome(Genome genome); // protected: must be called inside subclass and abstract:
-															// implemented with @Override method
-	/**
-	 * Species class.
-	 */
-	public class Species {
-
-		public Genome mascot;
-		public List<Genome> members;
-		public Map<Float, Genome> fitnessPop;
-		public float totalAdjustedFitness = 0f;
-
-		public Species(Genome mascot) {
-			this.mascot = mascot;
-			this.members = new LinkedList<Genome>();
-			this.members.add(mascot);
-			this.fitnessPop = new HashMap<Float, Genome>();
-		}
-
-		public void addAdjustedFitness(float adjustedFitness) {
-			this.totalAdjustedFitness += adjustedFitness;
-		}
-
-		/**
-		 * Selects new random mascot + clear members + set totaladjustedfitness to 0f
-		 * 
-		 * @param r random seed.
-		 */
-		public void reset(Random r) {
-			int newMascotIndex = r.nextInt(members.size());
-			this.mascot = members.get(newMascotIndex);
-
-			members.clear();
-			fitnessPop.clear();
-			totalAdjustedFitness = 0f;
-		}
-	}
-
-	/**
-	 * returns species mapped to genomes .
-	 * 
-	 * @return mappedSpecies.
-	 */
-	public Map<Genome, Species> getSpecies() {
-		return mappedSpecies;
+	public Genome getFittestGenome(){
+		Genome alphaGenome = lineage.POMs.keySet().stream().max((p1,p2)->p1.highScore.compareTo(p2.highScore)).get().mascot;
+		return alphaGenome;
 	}
 
 }
