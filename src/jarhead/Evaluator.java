@@ -113,7 +113,7 @@ public abstract class Evaluator {
 		System.out.println("Performing crossover..");
 		//TODO: build a species list and crossover in parallel
 		//epsilon exploration
-		if(lineage.POMs.keySet().stream().anyMatch(p->p.members.isEmpty())){
+		if(lineage.POMs.keySet().parallelStream().anyMatch(p->p.members.isEmpty())){
 			fertility = ScarcityofResources(populationSize);//a POM is swappedOut
 		}else{
 			fertility = populationSize;
@@ -191,16 +191,16 @@ public abstract class Evaluator {
 		double completeWeight = 0.0; // sum of probabilities of selecting each species - selection is more probable
 										// for species with higher fitness
 		// filter out empty POMs as they arent considered here
-		List<PointOfMutation> filteredPOMs = lineage.POMs.keySet().stream()
+		List<PointOfMutation> filteredPOMs = lineage.POMs.keySet().parallelStream()
 							 .filter(p->!p.members.isEmpty())
 							 .collect(Collectors.toList());
-		completeWeight = filteredPOMs.stream()
+		completeWeight = filteredPOMs.parallelStream()
 					     .map(p->p.highScore)
 					     .reduce(0f, (s1,s2)-> s1+s2);
 		double r = Math.random() * completeWeight;
 		double countWeight = 0.0;
 		//POMs sorted to bias towards higher scores.
-		for (PointOfMutation p : filteredPOMs.stream()
+		for (PointOfMutation p : filteredPOMs.parallelStream()
 						     .sorted((p1,p2)->p1.highScore.compareTo(p2.highScore))
 						     .collect(Collectors.toList())) {
 			countWeight += p.highScore;
@@ -242,7 +242,7 @@ public abstract class Evaluator {
 	  */
 	// epsilon greedy resource stagnation
 	private int ScarcityofResources(int population) {
-		nextResource = (int) Math.ceil(scoreMap.values().stream()
+		nextResource = (int) Math.ceil(scoreMap.values().parallelStream()
 							        .reduce(0f, (v1,v2)-> v1+v2));
 
 		if(nextResource < 0){
@@ -271,11 +271,11 @@ public abstract class Evaluator {
 	protected abstract float evaluateGenome(Genome genome); // protected: must be called inside subclass and abstract:
 								// implemented with @Override method
 	public float getHighestScore(){
-		return lineage.POMs.keySet().stream().max((p1,p2)->p1.highScore.compareTo(p2.highScore)).get().highScore;
+		return lineage.POMs.keySet().parallelStream().max((p1,p2)->p1.highScore.compareTo(p2.highScore)).get().highScore;
 	}
 
 	public Genome getFittestGenome(){
-		Genome alphaGenome = lineage.POMs.keySet().stream().max((p1,p2)->p1.highScore.compareTo(p2.highScore)).get().mascot;
+		Genome alphaGenome = lineage.POMs.keySet().parallelStream().max((p1,p2)->p1.highScore.compareTo(p2.highScore)).get().mascot;
 		return alphaGenome;
 	}
 
