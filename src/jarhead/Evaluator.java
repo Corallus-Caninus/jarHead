@@ -29,17 +29,20 @@ public abstract class Evaluator {
 //	private float C2 = 1.0f;
 //	private float C3 = 0.4f;
 //	private float DT = 20.0f;
+	private int RESOURCES = 1+ 10; // SoR hyperparameter for add population always +1 to guarantee pairs for crossover
 	private float MUTATION_RATE = 0.02f;
 	private float ADD_CONNECTION_RATE = 0.2f;
 	private float ADD_NODE_RATE = 0.1f;
 
 	private int populationSize;
+	private int fertility;
 
 	private List<Genome> genepool;
 	private List<Genome> nextGenGenomes;
 	
 	private Ancestors lineage;
 	private Integer prevResource, nextResource = null;
+	private Integer rate, summation = 0;
 
 	private Map<Genome, Float> scoreMap;
 	private float highestScore;
@@ -59,6 +62,7 @@ public abstract class Evaluator {
 	 */
 	public Evaluator(int populationSize, Genome startingGenome, Counter connectionInnovation, Counter nodeInnovation) {
 		this.populationSize = populationSize;
+		this.fertility = populationSize;
 		this.connectionInnovation = connectionInnovation;
 		this.nodeInnovation = nodeInnovation;
 
@@ -109,9 +113,8 @@ public abstract class Evaluator {
 		// Breed the rest of the genomes
 		System.out.println("Performing crossover..");
 		//TODO: build a species list and crossover in parallel
-		//TODO: limit per POM based on increase in fitness.
-		//	(Epsilon-stagnation of resources/niche)
-		while (nextGenGenomes.size() < populationSize) {
+		fertility = ScarcityofResources(populationSize);	
+		while (nextGenGenomes.size() < fertility) {
 			// call getRandomPoMBiasedInnovationDensity
 			PointOfMutation PoM = getRandomPOMBiasedFitness(lineage, random);
 			// call getRandomGenomeBiasedAdjustedFitness
@@ -150,9 +153,14 @@ public abstract class Evaluator {
 			// lead naturally into A.S.
 		}
 		if(nextGenGenomes.size() < populationSize){
+			System.out.println("Respawning lacking genepool...");
 			PointOfMutation respawn = lineage.swapIn(random);
 			while(nextGenGenomes.size() < populationSize){
-				respawn.members.add(respawn.mascot); //TODO: mutate mascot weights
+				Genome randomized = new Genome(respawn.mascot);
+				randomized.mutation(random);	
+
+				respawn.members.add(randomized); 
+				nextGenGenomes.add(randomized);
 			}
 		}
 		
@@ -164,15 +172,18 @@ public abstract class Evaluator {
 
 	/**
 	 * Select a random PointOfMutation from the Ancestors list biased towards
-	 * POMs with higher score values.
+	 * POMs with higher score values. 
+	 * (Fitness of a species/epsilon exploitation)
 	 * 
 	 * @param random random seed.
 	 * @return randomly selected species.
 	 */
+	//TODO: why is random passed in if this belongs to the same class?
 	private PointOfMutation getRandomPOMBiasedFitness(Ancestors lineage, Random random) {
 		double completeWeight = 0.0; // sum of probabilities of selecting each species - selection is more probable
 										// for species with higher fitness
-		// filter out empty POMs as they arent considered here	
+		// filter out empty POMs as they arent considered here
+		//TODO: also need to filter out POMs with 1 member
 		List<PointOfMutation> filteredPOMs = lineage.POMs.keySet().stream()
 							 .filter(p->!p.members.isEmpty())
 							 .collect(Collectors.toList());
@@ -181,7 +192,7 @@ public abstract class Evaluator {
 					     .reduce(0f, (s1,s2)-> s1+s2);
 		double r = Math.random() * completeWeight;
 		double countWeight = 0.0;
-		//POMs sorted by score to bias towards higher scores.
+		//POMs sorted to bias towards higher scores.
 		for (PointOfMutation p : filteredPOMs.stream()
 						     .sorted((p1,p2)->p1.highScore.compareTo(p2.highScore))
 						     .collect(Collectors.toList())) {
@@ -190,7 +201,7 @@ public abstract class Evaluator {
 				return p;
 			}
 		}
-		throw new RuntimeException("Couldn't find a PointOfMutation..." 
+		throw new RuntimeException("Couldn't find a PointOfMutation..."  // no case for this given Ancestors constructor
 				+ ", and the total score is " + completeWeight);
 	}
 	/**
@@ -217,24 +228,36 @@ public abstract class Evaluator {
 		throw new RuntimeException("Couldn't find a genome... PointOfMutation is " + selectFrom + 
 				 "total adjusted fitness is " + completeWeight);
 	}
+	/** 
+	  * Reduce crossover of current species based on ability to exploit their respective niches
+	  *(Fertillity of species/epsilon exploration)
+	  *
+	  */
 	// epsilon greedy resource stagnation
 	private int ScarcityofResources(int population) {
-		Float rate;
-		if(prevResource == null){
-			prevResource = 1;
-		}
+		//TODO: 
+		//integral of derivative
 		nextResource = (int) Math.ceil(scoreMap.values().stream()
 							        .reduce(0f, (v1,v2)-> v1+v2));
+
 		if(nextResource < 0){
-			System.out.println("ERROR: genepool scoremap is less than 0..");
+			System.out.println("ERROR: genepool total score is negative..");
 			System.exit(0);
 		}
+		if(prevResource == null){
+			rate = 0;	
+		}else{
+			rate = nextResource-prevResource;
+		}
 
-		rate = (float) nextResource/prevResource;
+		summation += rate; 
 		//would rather use derivative to tune population reduction.
+		//derivative through a moving average (low freq/pass fitness rate)
 		//if(rate < 0){
-		if(rate < 1){
-			return (int) Math.ceil(population * rate); //reduce population by this amount
+		if(summation < 0){
+			prevResource = nextResource;
+			System.out.println("\t\t\n\nSoR DEBUG: " + summation + '\n');
+			return summation < -population? 0 : (population - RESOURCES)+summation;
 		}else{
 			prevResource = nextResource;
 			return population;
