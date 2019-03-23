@@ -9,33 +9,34 @@ import java.util.stream.*;
 // TODO: set private variables/DataStructures accordingly. Consider gettters and setters
 public class Ancestors{
 	//NOTE: ConnectionGene objects are not comparable. use keySet or innovation number
-	public Map<PointOfMutation, Integer> POMs;
+	public ConcurrentMap<PointOfMutation, Integer> POMs;
 	public HashMap<Integer, ConnectionGene> novelInnovationMap;
 
 	//constructor (called in Evaluator constructor)
 	public Ancestors(Genome initialGenome){ //initial genome==Species.mascot;
 		novelInnovationMap = new HashMap<Integer, ConnectionGene>();
-		POMs = new HashMap<PointOfMutation, Integer>();//Integer is for AncestryTree lineage
+		POMs = new ConcurrentHashMap<PointOfMutation, Integer>();//Integer is for AncestryTree lineage
 		
 		novelInnovationMap.putAll(initialGenome.getConnectionGenes());
-		POMs.put(new PointOfMutation(0f, initialGenome), 0);//initial PoM TODO: initial score hyperparameter
+		POMs.put(new PointOfMutation(0f, initialGenome), 1);//initial PoM TODO: initial score hyperparameter
 	}
 
 	public void migrate(List<Genome> genepool){
 	//migration and placement of genomes.
-	//currently uses immediate migration (to most complex match)
 	//TODO?: implement iterative migration (only migrate to lineage thats +1)
 		swapOut();//clear members
 		for(Genome assignGenome : genepool){
 			PointOfMutation match = POMs.entrySet().stream()
-					.sorted((e1,e2)->e2.getValue().compareTo(e1.getValue()))//TODO: check this is sorted right. this needs debug/testing
+					.sorted((e1,e2)->e2.getValue().compareTo(e1.getValue()))
 				      	.filter(e->assignGenome.getConnectionGenes().keySet()
 					      	     .containsAll(e.getKey().innovationGenes.keySet()))
 				        .findFirst().get().getKey();
 			match.members.add(assignGenome); //defaults to initial POM(initGenome)
 		}
 		System.out.println("MIGRATION PRINTOUT: ");
-		for(PointOfMutation printing : POMs.keySet()){
+		for(PointOfMutation printing : POMs.keySet().stream()
+							    .sorted((p1,p2)->p1.highScore.compareTo(p2.highScore))
+							    .collect(Collectors.toList())){
 			System.out.println("\tPoM " + printing + " With " + printing.members.size() + " Genomes"
 						+ " with score " + printing.highScore);
 		}
@@ -45,32 +46,43 @@ public class Ancestors{
 	public void speciate(Map<Genome, Float> scoreMap){
 		boolean branched = false;
 
-		//TODO: need to move scoreMap to concurrentMap getting concurrent modification from eval
-		// (bane of laziness)
 		for(PointOfMutation checkPOM : POMs.keySet()){
 			Optional<Genome> match = checkPOM.members.stream().filter(g->scoreMap.get(g) > checkPOM.highScore)
-						   .filter(g->checkPOM.innovationGenes.keySet().containsAll(g.getConnectionGenes().keySet()))
+						   //filter out genomes that dont have novel innovations. careful as migrate MUST happen first
+						   .filter(g->!checkPOM.innovationGenes.keySet().containsAll(g.getConnectionGenes().keySet()))//wut
 						   .max((g1,g2)->scoreMap.get(g1).compareTo(scoreMap.get(g2)));
 			if(match.isPresent()){
 				System.out.println("HIGHSCORE");
-
+				
 				PointOfMutation addition = new PointOfMutation(scoreMap.get(match.get()), match.get());
+				System.out.println("INSERTING INTO POMS...");
 				POMs.put(addition, POMs.get(checkPOM)+1); //broken here?
 				//remove all innovations found in matching genome (HashMap method)
-				System.out.println("Establishing a new niche..");
-				
-			novelInnovationMap.keySet().removeAll(match.get().getConnectionGenes().keySet()
-							 .stream().filter(c->novelInnovationMap.containsKey(c))
-							 .collect(Collectors.toList()));
 				
 			        branched = true;
 			}
 		}
 		//consider new POMs for migration
 		if(branched){
+			System.out.println("Establishing a new niche..");
+			//TODO: concurrent modification can this move outside the loop
+			
+			//remove innovations from above todo
+			consumeInnovations();
 			migrate(scoreMap.keySet().stream().collect(Collectors.toList()));
 		}
 	}
+	//used to declare a niche
+	public void consumeInnovations(){
+		List<Integer> potentialNiches = POMs.keySet().stream()
+							  .flatMap(p->p.members.stream())
+							  .flatMap(g->g.getConnectionGenes().keySet().stream())
+							  .filter(c->novelInnovationMap.containsKey(c))
+							  .collect(Collectors.toList());
+		novelInnovationMap.keySet().removeAll(potentialNiches);
+		
+	}
+	//novel innovation produced by genepool. TODO: use this for global SCAN_GENOMES check
 	public void updateInnovations(List<Genome> nextGenGenomes){
 		//add all new ConnectionsGenes
 		System.out.println("innovationList count: " + novelInnovationMap.entrySet().stream().count());
@@ -94,7 +106,6 @@ public class Ancestors{
 		List<Integer> swappedOut = POMs.entrySet().stream().filter(e->e.getKey().members.isEmpty())
 						   .map(e->e.getValue())
 						   .collect(Collectors.toList());
-
 		Integer selection = swappedOut.get(r.nextInt(swappedOut.size()));
 
 		System.out.println("swapIn: selecting from: " + selection);

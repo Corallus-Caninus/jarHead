@@ -31,8 +31,8 @@ public abstract class Evaluator {
 //	private float DT = 20.0f;
 	private int RESOURCES = 1+ 10; // SoR hyperparameter for add population always +1 to guarantee pairs for crossover
 	private float MUTATION_RATE = 0.02f;
-	private float ADD_CONNECTION_RATE = 0.2f;
-	private float ADD_NODE_RATE = 0.1f;
+	private float ADD_CONNECTION_RATE = 0.02f;
+	private float ADD_NODE_RATE = 0.01f;
 
 	private int populationSize;
 	private int fertility;
@@ -90,15 +90,14 @@ public abstract class Evaluator {
 
 		scoreMap.clear();
 		nextGenGenomes.clear();
-		highestScore = Float.MIN_VALUE;
+		highestScore = Float.MIN_VALUE;//TODO: DEPRACATED
 		fittestGenome = null;
 
 		// Place genomes into species
 		System.out.println("Placing genomes into species..");
 		lineage.migrate(genepool);//does migrate need to be called? private?
-		System.out.println("Total number of species.. " + lineage.POMs);
 
-		System.out.println("Evaluating genomes and assigning score");
+		System.out.println("Evaluating genomes and assigning score..");
 		// Evaluate genomes and assign score
 		for (Genome g : genepool) {
 			float score = evaluateGenome(g);
@@ -113,52 +112,60 @@ public abstract class Evaluator {
 		// Breed the rest of the genomes
 		System.out.println("Performing crossover..");
 		//TODO: build a species list and crossover in parallel
-		fertility = ScarcityofResources(populationSize);	
+		//epsilon exploration
+		if(lineage.POMs.keySet().stream().anyMatch(p->p.members.isEmpty())){
+			fertility = ScarcityofResources(populationSize);//a POM is swappedOut
+		}else{
+			fertility = populationSize;
+		}
 		while (nextGenGenomes.size() < fertility) {
-			// call getRandomPoMBiasedInnovationDensity
 			PointOfMutation PoM = getRandomPOMBiasedFitness(lineage, random);
-			// call getRandomGenomeBiasedAdjustedFitness
-			// 	-change totalAdjustedFitness to relativeFitness
-			Genome p1 = getRandomGenomeBiasedFitness(PoM, scoreMap, random);
-			Genome p2 = getRandomGenomeBiasedFitness(PoM, scoreMap, random);
-
-			Genome child;
-			if (scoreMap.get(p1) >= scoreMap.get(p2)) {
-				child = Genome.crossover(p1, p2, random);
-			} else { // Is this due to innovation number?
-				child = Genome.crossover(p2, p1, random);
-			} // else they are equal so disjoint and excess genes must be randomized
-				// respectively not between parents.
-			if (random.nextFloat() < MUTATION_RATE) {
-				child.mutation(random);
+			if(PoM.members.size() < 2){ //this can be die-off hyperparameter
+				PoM.members.clear();
+			}else{
+			
+				Genome p1 = getRandomGenomeBiasedFitness(PoM, scoreMap, random);
+				Genome p2 = getRandomGenomeBiasedFitness(PoM, scoreMap, random);
+				if(p1 == null || p2 == null){
+					PoM.members.clear(); //scoreMap is trash.
+				}else{
+	
+					Genome child;
+					if (scoreMap.get(p1) >= scoreMap.get(p2)) {
+						child = Genome.crossover(p1, p2, random);
+					} else { // Is this due to innovation number?
+						child = Genome.crossover(p2, p1, random);
+					} // else they are equal so disjoint and excess genes must be randomized
+						// respectively not between parents.
+					if (random.nextFloat() < MUTATION_RATE) {
+						child.mutation(random);
+					}
+					if (random.nextFloat() < ADD_CONNECTION_RATE) {
+						// System.out.println("Adding connection mutation...");
+						child.addConnectionMutation(random, connectionInnovation, genepool);
+					}
+					if (random.nextFloat() < ADD_NODE_RATE) {
+						// System.out.println("Adding node mutation...");
+						child.addNodeMutation(random, connectionInnovation, nodeInnovation, genepool);
+					}
+					nextGenGenomes.add(child);
+				}
 			}
-			if (random.nextFloat() < ADD_CONNECTION_RATE) {
-				// System.out.println("Adding connection mutation...");
-				child.addConnectionMutation(random, connectionInnovation, genepool);
-			}
-			if (random.nextFloat() < ADD_NODE_RATE) {
-				// System.out.println("Adding node mutation...");
-				child.addNodeMutation(random, connectionInnovation, nodeInnovation, genepool);
-			}
-			nextGenGenomes.add(child);
 			// TODO: need to "garbage collect" fragmented innovation numbers lost with
 			// parents that are crossed over innovationCounter = stream.map(innovation
 			// numbers).sort(acompb).get(0)
 			// will fix max fragmentation but not gaps within innovation list. innovation
 			// list still has historical representation is just not an efficient counting
 			// method wrt crossover.
-
-			// This may be a good point to add a global ConnectionGene
-			// List and redo all instances of SCAN GENOMES in topology mutation. this will
-			// lead naturally into A.S.
 		}
 		if(nextGenGenomes.size() < populationSize){
-			System.out.println("Respawning lacking genepool...");
 			PointOfMutation respawn = lineage.swapIn(random);
+			System.out.println("Respawning lacking genepool... " + respawn);
 			while(nextGenGenomes.size() < populationSize){
 				Genome randomized = new Genome(respawn.mascot);
 				randomized.mutation(random);	
 
+				System.out.println("adding respawn: " + respawn + " to genepool: " + nextGenGenomes.size());
 				respawn.members.add(randomized); 
 				nextGenGenomes.add(randomized);
 			}
@@ -179,11 +186,11 @@ public abstract class Evaluator {
 	 * @return randomly selected species.
 	 */
 	//TODO: why is random passed in if this belongs to the same class?
+	//TODO: actually bias this to fitness
 	private PointOfMutation getRandomPOMBiasedFitness(Ancestors lineage, Random random) {
 		double completeWeight = 0.0; // sum of probabilities of selecting each species - selection is more probable
 										// for species with higher fitness
 		// filter out empty POMs as they arent considered here
-		//TODO: also need to filter out POMs with 1 member
 		List<PointOfMutation> filteredPOMs = lineage.POMs.keySet().stream()
 							 .filter(p->!p.members.isEmpty())
 							 .collect(Collectors.toList());
@@ -225,8 +232,8 @@ public abstract class Evaluator {
 				return g;
 			}
 		}
-		throw new RuntimeException("Couldn't find a genome... PointOfMutation is " + selectFrom + 
-				 "total adjusted fitness is " + completeWeight);
+		System.out.println("Discarding selection of POM: " + selectFrom + " scoreSum is: " + completeWeight);
+		return null;
 	}
 	/** 
 	  * Reduce crossover of current species based on ability to exploit their respective niches
@@ -235,8 +242,6 @@ public abstract class Evaluator {
 	  */
 	// epsilon greedy resource stagnation
 	private int ScarcityofResources(int population) {
-		//TODO: 
-		//integral of derivative
 		nextResource = (int) Math.ceil(scoreMap.values().stream()
 							        .reduce(0f, (v1,v2)-> v1+v2));
 
@@ -253,8 +258,7 @@ public abstract class Evaluator {
 		summation += rate; 
 		//would rather use derivative to tune population reduction.
 		//derivative through a moving average (low freq/pass fitness rate)
-		//if(rate < 0){
-		if(summation < 0){
+		if(summation < 0){ //lost fitness momentum
 			prevResource = nextResource;
 			System.out.println("\t\t\n\nSoR DEBUG: " + summation + '\n');
 			return summation < -population? 0 : (population - RESOURCES)+summation;
@@ -267,7 +271,7 @@ public abstract class Evaluator {
 	protected abstract float evaluateGenome(Genome genome); // protected: must be called inside subclass and abstract:
 								// implemented with @Override method
 	public float getHighestScore(){
-		return highestScore;
+		return lineage.POMs.keySet().stream().max((p1,p2)->p1.highScore.compareTo(p2.highScore)).get().highScore;
 	}
 
 	public Genome getFittestGenome(){
