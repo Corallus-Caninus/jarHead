@@ -9,7 +9,7 @@ public class PointOfMutation{
 	
 	//Constructor
 	public PointOfMutation(Float score, Genome newGenome){	
-		mascot = newGenome;//no need to reinstantiate
+		mascot = new Genome(newGenome);//snapshot of genome
 		innovationGenes = newGenome.getConnectionGenes();
 
 		highScore = score;//not highScore as not resetting scores on branch.

@@ -9,7 +9,7 @@ import java.util.stream.*;
 // TODO: set private variables/DataStructures accordingly. Consider gettters and setters
 public class Ancestors{
 	//NOTE: ConnectionGene objects are not comparable. use keySet or innovation number
-	public ConcurrentMap<PointOfMutation, Integer> POMs;
+	public ConcurrentMap<PointOfMutation, Integer> POMs;//concurrent for speciation
 	public HashMap<Integer, ConnectionGene> novelInnovationMap;
 
 	//constructor (called in Evaluator constructor)
@@ -23,7 +23,6 @@ public class Ancestors{
 
 	public void migrate(List<Genome> genepool){
 	//migration and placement of genomes.
-	//TODO?: implement iterative migration (only migrate to lineage thats +1)
 		swapOut();//clear members
 		for(Genome assignGenome : genepool){
 			PointOfMutation match = POMs.entrySet().parallelStream()
@@ -31,14 +30,14 @@ public class Ancestors{
 				      	.filter(e->assignGenome.getConnectionGenes().keySet()
 					      	     .containsAll(e.getKey().innovationGenes.keySet()))
 				        .findFirst().get().getKey();
-			match.members.add(assignGenome); //defaults to initial POM(initGenome)
+			match.members.add(assignGenome); //defaults to initial POM
 		}
 		System.out.println("MIGRATION PRINTOUT: ");
 		for(PointOfMutation printing : POMs.keySet().parallelStream()
 							    .sorted((p1,p2)->p1.highScore.compareTo(p2.highScore))
 							    .collect(Collectors.toList())){
-			System.out.println("\tPoM " + printing + " With " + printing.members.size() + " Genomes"
-						+ " with score " + printing.highScore);
+			System.out.println("\t " + printing + " With " + printing.members.size() + " @ " + POMs.get(printing) + " Genomes"
+						+ " with score " + printing.highScore + " and mascot: " + printing.mascot);
 		}
 		System.out.println("MIGRATION COMPLETE...");
 
@@ -47,14 +46,15 @@ public class Ancestors{
 		boolean branched = false;
 
 		for(PointOfMutation checkPOM : POMs.keySet()){
+
 			Optional<Genome> match = checkPOM.members.parallelStream().filter(g->scoreMap.get(g) > checkPOM.highScore)
 						   //filter out genomes that dont have novel innovations. careful as migrate MUST happen first
-						   .filter(g->!checkPOM.innovationGenes.keySet().containsAll(g.getConnectionGenes().keySet()))//wut
+						   .filter(g->!checkPOM.innovationGenes.keySet().containsAll(g.getConnectionGenes().keySet()))
 						   .max((g1,g2)->scoreMap.get(g1).compareTo(scoreMap.get(g2)));
 			if(match.isPresent()){
 				System.out.println("HIGHSCORE");
-				
-				PointOfMutation addition = new PointOfMutation(scoreMap.get(match.get()), match.get());
+				Genome newMascot = match.get();
+				PointOfMutation addition = new PointOfMutation(scoreMap.get(newMascot), newMascot);
 				System.out.println("Establishing a new niche..");
 				POMs.put(addition, POMs.get(checkPOM)+1);
 				consumeInnovations();
@@ -68,7 +68,16 @@ public class Ancestors{
 			migrate(scoreMap.keySet().parallelStream().collect(Collectors.toList()));
 		}
 	}
-	//used to declare a niche
+	//nicheOptimization (backtracking weight optimization):
+	//called after speciate
+	//if highscore but no innovation genes remove POM and construct same POM topology 
+	//with superior weight schema and remove all POMs with lineage count > POMs.get(checkPOM)
+	//and score < highscore
+	//
+	//else{
+	/**
+	 * used to declare a niche
+	 */
 	public void consumeInnovations(){
 		List<Integer> potentialNiches = POMs.keySet().parallelStream()
 							  .flatMap(p->p.members.parallelStream())
@@ -78,12 +87,16 @@ public class Ancestors{
 		novelInnovationMap.keySet().removeAll(potentialNiches);
 		
 	}
-	//novel innovation produced by genepool. TODO: use this for global SCAN_GENOMES check
+	/**
+	 * novel innovation produced by genepool. 
+	 */
+	//TODO: use this for global SCAN_GENOMES check
+	//TODO: refactor to generateInnovations like above
 	public void updateInnovations(List<Genome> nextGenGenomes){
 		//add all new ConnectionsGenes
 		System.out.println("innovationList count: " + novelInnovationMap.entrySet().parallelStream().count());
 
-		List<ConnectionGene> novelInnovations =	nextGenGenomes.parallelStream().flatMap(g->g.getConnectionGenes().values().stream())
+		List<ConnectionGene> novelInnovations =	nextGenGenomes.parallelStream().flatMap(g->g.getConnectionGenes().values().parallelStream())
 				      			//not already in novelInnovationMap
 				      			.filter(c->!novelInnovationMap.keySet().contains(c.getInnovation()))
 				      			//innovation is not already consumed in a niche
