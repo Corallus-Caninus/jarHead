@@ -394,7 +394,7 @@ public class Genome implements Serializable {
 		if (child.setDepth()) {
 			return child;
 		} else {
-			return parent1; // ensure parent1 doesnt exist in genome otherwise two identical objects exist
+			return new Genome(parent1);
 		}
 	}
 
