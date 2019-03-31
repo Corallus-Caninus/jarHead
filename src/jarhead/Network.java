@@ -3,9 +3,10 @@ package jarhead;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.concurrent.*;
 import java.util.Stack;
+import java.util.*;
 
 import jarhead.NodeGene.TYPE;
 
@@ -20,7 +21,7 @@ public class Network {
 	// connectionSignals which are used during processing from buffer
 	private List<ConnectionGene> buffer = new ArrayList<ConnectionGene>();
 	// values passed each depth during forward propagation
-	private ConcurrentHashMap<Integer, Float> signals = new ConcurrentHashMap<Integer, Float>();
+	private ConcurrentHashMap<Integer, Float> signals = new ConcurrentHashMap<Integer, Float>();//TODO: what are the defficiencies of ConcurrentHashMap?
 
 	private Genome genome;
 
@@ -31,6 +32,7 @@ public class Network {
 	public List<Float> run(List<Float> sensors) {
 		// TODO: sort within constructor not each run.
 		// sort connections by depth
+
 		tmpConnections.addAll(genome.getConnectionGenes().values().stream().filter(c -> c.isExpressed())
 				.sorted(connectionsSortByDepth).collect(Collectors.toList()));
 
@@ -38,7 +40,12 @@ public class Network {
 		buffer.addAll(
 				tmpConnections.stream().filter(c -> genome.getNodeGenes().get(c.getInNode()).getType() == TYPE.INPUT)
 						.collect(Collectors.toList()));
-		buffer.forEach(i -> signals.put(i.getInNode(), activate(sensors.get(i.getInNode()))));
+
+		buffer.forEach(i -> {
+			if(!signals.containsKey(i.getInNode())){
+				signals.put(i.getInNode(), activate(sensors.get(i.getInNode())));
+			}
+		});
 
 		tmpConnections.removeAll(buffer);
 
@@ -52,11 +59,12 @@ public class Network {
 		// Forward propagate
 		for (int i = 1; !buffer.isEmpty(); i++) {
 			// collect signals per node (multiply by weights and sum)
-			buffer.parallelStream().forEach(c -> {
+			buffer.stream().forEachOrdered(c -> { //ordered to prevent initial value race condition
 				signals.put(c.getOutNode(),
 						zeroIfNull(signals.get(c.getOutNode())) + signals.get(c.getInNode()) * c.getWeight());
 			});
 			buffer.clear();
+
 			// activate all nodes of this depth
 			for (int n : signals.keySet()) {
 				if (genome.getNodeGenes().get(n).getDepth() == i) {
