@@ -29,7 +29,8 @@ public abstract class Evaluator {
 //	private float C2 = 1.0f;
 //	private float C3 = 0.4f;
 //	private float DT = 20.0f;
-	private int RESOURCES = 1+ 10; // SoR hyperparameter for add population always +1 to guarantee pairs for crossover
+//	private int RESOURCES = 1+ 1; // SoR hyperparameter for add population always +1 to guarantee pairs for crossover
+	//consider removing resources since summation isnt used
 	private float MUTATION_RATE = 0.02f;
 	private float ADD_CONNECTION_RATE = 0.02f;
 	private float ADD_NODE_RATE = 0.01f;
@@ -165,7 +166,6 @@ public abstract class Evaluator {
 				Genome randomized = new Genome(respawn.mascot);
 				randomized.mutation(random);	
 
-				System.out.println("adding respawn: " + respawn + " to genepool: " + nextGenGenomes.size());
 				respawn.members.add(randomized); 
 				nextGenGenomes.add(randomized);
 			}
@@ -185,8 +185,9 @@ public abstract class Evaluator {
 	 * @param random random seed.
 	 * @return randomly selected species.
 	 */
-	//TODO: why is random passed in if this belongs to the same class?
+	//TODO: why is random passed in if this belongs to the same class and not static?
 	//TODO: actually bias this to fitness
+	//TODO: refactor this to ScarcityOfResources into PointOfMutation or Chromosome
 	private PointOfMutation getRandomPOMBiasedFitness(Ancestors lineage, Random random) {
 		double completeWeight = 0.0; // sum of probabilities of selecting each species - selection is more probable
 										// for species with higher fitness
@@ -237,10 +238,11 @@ public abstract class Evaluator {
 	}
 	/** 
 	  * Reduce crossover of current species based on ability to exploit their respective niches
-	  *(Fertillity of species/epsilon exploration)
+	  *(Fertillity of species/epsilon exploration) WIP
 	  *
 	  */
 	// epsilon greedy resource stagnation
+	// TODO: fix rate condition possibly rewrite needs to consider population ratio
 	private int ScarcityofResources(int population) {
 		nextResource = (int) Math.ceil(scoreMap.values().parallelStream()
 							        .reduce(0f, (v1,v2)-> v1+v2));
@@ -255,13 +257,14 @@ public abstract class Evaluator {
 			rate = nextResource-prevResource;
 		}
 
-		summation += rate; 
-		//would rather use derivative to tune population reduction.
-		//derivative through a moving average (low freq/pass fitness rate)
-		if(summation < 0){ //lost fitness momentum
+		//summation += rate; 
+		if(rate < 0){ //lost fitness momentum
 			prevResource = nextResource;
-			System.out.println("\t\t\n\nSoR DEBUG: " + summation + '\n');
-			return summation < -population? 0 : (population - RESOURCES)+summation;
+			System.out.println("\t\t\n\nSoR DEBUG: " + rate + '\n');
+			//return rate < -population? 0 : (population - RESOURCES)+rate; //TODO: doesnt error but sloppy 
+			return rate < -population? 0 : population + rate;
+
+
 		}else{
 			prevResource = nextResource;
 			return population;
@@ -275,8 +278,12 @@ public abstract class Evaluator {
 	}
 
 	public Genome getFittestGenome(){
-		Genome alphaGenome = lineage.POMs.keySet().parallelStream().max((p1,p2)->p1.highScore.compareTo(p2.highScore)).get().mascot;
-		return alphaGenome;
+	        return lineage.POMs.keySet().parallelStream().max((p1,p2)->p1.highScore.compareTo(p2.highScore)).get().mascot;//TODO: BUG! needs best member 
+																	    // not mascot? highScore is never
+																	    // reset this should be mascot?
 	}
+	public PointOfMutation getFittestPOM(){
+	        return lineage.POMs.keySet().parallelStream().max((p1,p2)->p1.highScore.compareTo(p2.highScore)).get();
 
+	}
 }
