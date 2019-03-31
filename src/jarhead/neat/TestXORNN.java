@@ -34,6 +34,7 @@ public class TestXORNN {
 		// first column and second column contains operands, the third column is for
 		// bias input
 		float[][] input = { { 0f, 0f, 1f }, { 0f, 1f, 1f }, { 1f, 0f, 1f }, { 1f, 1f, 1f } };
+		//NOTE: last input is not technically bias as it is considered before activation.
 
 		float[] correctResult = { 0f, 1f, 1f, 0f };
 
@@ -75,36 +76,32 @@ public class TestXORNN {
 		}
 
 		List<Float> newList = new LinkedList<Float>();
-		Evaluator eva = new Evaluator(100, parent2, connectionInnovation, nodeInnovation) {
+		Evaluator eva = new Evaluator(200, parent2, connectionInnovation, nodeInnovation) {
 			@Override
 			public float evaluateGenome(Genome g) {
-//				NeuralNetwork net = new NeuralNetwork(g);
-//				Network net = new Network(g);
+				float totalDistance = 0f;
 				Network net = new Network(g);
 
-				// System.out.println("===========NEW NETWORK=============");
-
-				float totalDistance = 0f;
 				for (int i = 0; i < input.length; i++) { 
 					float[] inputs = { input[i][0], input[i][1], input[i][2] };
-//					int testVal = r.nextInt(input.length); // needs stochastic sampling for trainning
-//					float[] inputs = { input[testVal][0], input[testVal][1], input[testVal][2] };
-
-					// System.out.println("Giving input "+Arrays.toString(inputs));
-//					float[] outputs = net.calculate(inputs);
 					
 					for (float a : inputs) {
 						newList.add(a);
 					}
 					List<Float> values = net.run(newList);
-					// System.out.println("Received output "+Arrays.toString(outputs));
-					float[] outputs = { values.get(0) };
 					newList.clear();
 
-					float distance = (float) Math.abs(correctResult[i] - outputs[0]);
-//					 System.out.println("Error: "+distance);
-//					totalDistance += Math.pow(distance, 2);
-					totalDistance+=distance; // broken for output set: [0,0,0,0]
+					float distance = (float) Math.sqrt(Math.pow(correctResult[i] - values.get(0), 2));
+
+//					 for(float input : inputs){
+//						 System.out.println("given input: " + input);
+//					 }
+//					 System.out.println("With output: " + values.get(0));
+//					 System.out.println("Error: "+ Math.sqrt(Math.pow(distance, 2)));
+					if(distance < 0.5f)
+						distance = 0;
+
+					totalDistance += distance;
 					values.clear();
 				}
 
@@ -112,42 +109,52 @@ public class TestXORNN {
 					totalDistance += 1f * (g.getConnectionGenes().size() - 30);
 				}
 
-//				 System.out.println("Total distance: "+totalDistance);
-//				return 100f - totalDistance * 5f;
-
-				return 4f - totalDistance;
-//				return totalDistance;
+				return 100f - totalDistance; // just make value ridiculously high until debuged
 			}
 		};
 
-		for (int i = 0; i < 200; i++) {
+		for (int i = 0; i < 100; i++) {
 			eva.evaluate();
 
 			System.out.println("Generation: " + i);
 			System.out.println("Generation: " + i);
-			System.out.print("Highest Score: " + eva.getHighestScore());
+			System.out.println("Highest Score: " + eva.getHighestScore());
 
-			if(eva.getHighestScore() >= 4.0f) {
+			if(eva.getHighestScore() >= 100.0f) {
 				System.out.println("BEST RUN: ");
-				Network bnet = new Network(eva.getFittestGenome());
-				for (int l = 0; l < input.length; l++) {
-					float[] inputs = { input[l][0], input[l][1], input[l][2] };
+				System.out.println(eva.getFittestGenome());
+				System.out.println(eva.getFittestPOM());
 
+				for(int x = 0; x < 2; x++){
+				Network net = new Network(eva.getFittestGenome());
+				float totalDistance = 0f;
+				for (int l = 0; l < input.length; l++) { 
+					float[] inputs = { input[l][0], input[l][1], input[l][2] };
 					for (float a : inputs) {
 						newList.add(a);
 					}
-					List<Float> values = bnet.run(newList);
-					System.out.println("RETURNED: " + values.get(0));
+					List<Float> values = net.run(newList);
 					newList.clear();
+
+					float distance = (float) Math.sqrt(Math.pow(correctResult[l] - values.get(0), 2));
+					System.out.println("Value: " + values.get(0) + " Result: " + correctResult[l] + " error: " + distance);
+					if(distance < 0.5f)
+						distance = 0f;
+
+					totalDistance += distance;
+					System.out.println("Value thus far: " + totalDistance);
 					values.clear();
 				}
 
-				//NetworkPrinter testing = new NetworkPrinter(eva.getFittestGenome());
-				//testing.displayGraph();
+				System.out.println("Final value: " + (100f - totalDistance)); // just make value ridiculously high until debuged
+				}
+
 			}
 			System.out.print("\n");
 		}
-		System.out.println("BEST RUN: ");
+		System.out.println("BEST RUN: " + eva.getHighestScore());
+		System.out.println(eva.getFittestGenome());
+		System.out.println(eva.getFittestPOM());
 		Network bnet = new Network(eva.getFittestGenome());
 		for (int i = 0; i < input.length; i++) {
 			float[] inputs = { input[i][0], input[i][1], input[i][2] };
@@ -156,14 +163,11 @@ public class TestXORNN {
 				newList.add(a);
 			}
 			List<Float> values = bnet.run(newList);
-			// System.out.println("Received output "+Arrays.toString(outputs));
-//			float[] outputs = {values.get(0)};
-			System.out.println("RETURNED: " + values.get(0));
+			System.out.println("RETURNED: " + values.get(0) + " for input: " 
+				+ inputs[0] + " , " + inputs[1] + " with expected value: " + correctResult[i]);
+
 			newList.clear();
 			values.clear();
 		}
-
-		//NetworkPrinter testing = new NetworkPrinter(eva.getFittestGenome());
-		//testing.displayGraph();
 	}
 }
