@@ -46,16 +46,46 @@ public class Ancestors{
 		boolean branched = false;
 
 		for(PointOfMutation checkPOM : POMs.keySet()){
+			Optional<Genome> match = checkPOM.members.parallelStream().filter(g->scoreMap.get(g) > checkPOM.highScore)
+								  .filter(g->checkPOM.innovationGenes.keySet().containsAll(g.getConnectionGenes().keySet()))
+								  .max((g1,g2)->scoreMap.get(g1).compareTo(scoreMap.get(g2)));
+			if(match.isPresent()){
+				System.out.println("OPTIMIZATION..");
+				PointOfMutation replacement = new PointOfMutation(scoreMap.get(match.get()), match.get());
+				POMs.put(replacement, POMs.get(checkPOM));
+				//remove all POMs that have lower high score than
+				//replacement and lineage greater than replacement
+				for(PointOfMutation extinct : POMs.keySet()){
+					if(POMs.get(extinct) >= POMs.get(replacement) && extinct.highScore < replacement.highScore){
+						POMs.remove(extinct);
+					}
+				}
+				POMs.remove(checkPOM);
+
+				//defragment lineage count
+				PointOfMutation buffer = POMs.keySet().stream().findFirst().get();
+				for(PointOfMutation rearrange : POMs.keySet().stream().skip(1).collect(Collectors.toSet())){
+					if(POMs.get(buffer) < POMs.get(rearrange) - 1){
+						POMs.remove(rearrange);
+						POMs.put(rearrange, POMs.get(buffer) + 1);
+					}
+					buffer = rearrange;
+				}
+				branched = true;
+			}
+		}
+
+		for(PointOfMutation checkPOM : POMs.keySet()){
 
 			Optional<Genome> match = checkPOM.members.parallelStream().filter(g->scoreMap.get(g) > checkPOM.highScore)
 						   //filter out genomes that dont have novel innovations. careful as migrate MUST happen first
 						   .filter(g->!checkPOM.innovationGenes.keySet().containsAll(g.getConnectionGenes().keySet()))
 						   .max((g1,g2)->scoreMap.get(g1).compareTo(scoreMap.get(g2)));
 			if(match.isPresent()){
-				System.out.println("HIGHSCORE");
+				System.out.println("HIGHSCORE..");
 				Genome newMascot = match.get();
 				PointOfMutation addition = new PointOfMutation(scoreMap.get(newMascot), newMascot);
-				System.out.println("Establishing a new niche..");
+
 				POMs.put(addition, POMs.get(checkPOM)+1);
 				consumeInnovations();
 				//remove all innovations found in matching genome (HashMap method)
@@ -69,7 +99,7 @@ public class Ancestors{
 		}
 	}
 	//nicheOptimization (backtracking weight optimization):
-	//called after speciate
+	//called within (before) speciate
 	//if highscore but no innovation genes remove POM and construct same POM topology 
 	//with superior weight schema and remove all POMs with lineage count > POMs.get(checkPOM)
 	//and score < highscore
@@ -91,7 +121,6 @@ public class Ancestors{
 	 * novel innovation produced by genepool. 
 	 */
 	//TODO: use this for global SCAN_GENOMES check
-	//TODO: refactor to generateInnovations like above
 	public void updateInnovations(List<Genome> nextGenGenomes){
 		//add all new ConnectionsGenes
 		System.out.println("innovationList count: " + novelInnovationMap.entrySet().parallelStream().count());
@@ -110,6 +139,10 @@ public class Ancestors{
 				novelInnovationMap.put(gene.getInnovation(), gene);
 		}
 	}
+	// this can be made adaptable with fitness localization 
+	// wrt discovered fitness landscape. innovationDensity holds
+	// appropriatness information for selection, backtracking 
+	// allows for adaptability
 	public PointOfMutation swapIn(Random r){
 		//selection biased towards innovationDensity
 		List<Integer> swappedOut = POMs.entrySet().parallelStream().filter(e->e.getKey().members.isEmpty())
