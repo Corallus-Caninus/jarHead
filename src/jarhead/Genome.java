@@ -26,10 +26,6 @@ import java.io.*;
 public class Genome implements Serializable {
 	private static final long serialVersionUID = 129348938L;
 
-	private final float PROBABILITY_PERTURBING = 0.9f; // TODO: move this up to evaluator with the rest of the
-			 				// hyperparameters verify with k.stanley on the importance and
-							// variation of this value
-
 	private Map<Integer, ConnectionGene> connections; // Integer map key is equivalent to connection innovation
 	private Map<Integer, NodeGene> nodes; // Integer map key is equivalent to node innovation aka node ID
 
@@ -101,7 +97,7 @@ public class Genome implements Serializable {
 	 * 
 	 * @param r random seed
 	 */
-	public void mutation(Random r) {
+	public void mutation(Random r, float PROBABILITY_PERTURBING) {
 		for (ConnectionGene con : connections.values()) { // iterate through connections
 			if (r.nextFloat() < PROBABILITY_PERTURBING) { // uniformly perturbing weights
 				con.setWeight(con.getWeight() * (r.nextFloat() * 4f - 2f));
@@ -118,9 +114,9 @@ public class Genome implements Serializable {
 	 * @param innovation innovation counter for new connection
 	 * @param genomes    global gene pool for innovation number
 	 */
-	public void addConnectionMutation(Random r, Counter innovation, List<Genome> genomes) {
+	public void addConnectionMutation(Random r, Counter innovation, Map<Integer, ConnectionGene> globalConnections) {
 
-		genomes.remove(this);
+//		genomes.remove(this);
 		int tries = 0;
 		boolean success = false;
 
@@ -192,15 +188,16 @@ public class Genome implements Serializable {
 			ConnectionGene newCon = new ConnectionGene(reversed ? node2.getId() : node1.getId(),
 					reversed ? node1.getId() : node2.getId(), weight, true);
 
-			// SCAN GENOMES//
-			Optional<ConnectionGene> match = genomes.parallelStream().map(g -> g.getConnectionGenes())
-					.flatMap(c -> c.values().parallelStream()
-							.filter(l -> l.getInNode() == newCon.getInNode() && l.getOutNode() == newCon.getOutNode()))
+			Optional<ConnectionGene> match = globalConnections.values().parallelStream()
+//					genomes.parallelStream().map(g -> g.getConnectionGenes())
+//					.flatMap(c -> c.values().parallelStream()
+							.filter(l -> l.getInNode() == newCon.getInNode() && l.getOutNode() == newCon.getOutNode())
 					.findAny();
 			if (match.isPresent()) { // global match
 				newCon.setInnovation(match.get().getInnovation());
 			} else { // novel connection
 				newCon.setInnovation(innovation.updateInnovation());
+				globalConnections.put(newCon.getInnovation(), newCon);
 			}
 
 			connections.put(newCon.getInnovation(), newCon);
@@ -257,8 +254,8 @@ public class Genome implements Serializable {
 	 * @param connectionInnovation
 	 * @param nodeInnovation
 	 */
-	public void addNodeMutation(Random r, Counter connectionInnovation, Counter nodeInnovation, List<Genome> genomes) {
-		genomes.remove(this);
+	public void addNodeMutation(Random r, Counter connectionInnovation, Counter nodeInnovation, Map<Integer, ConnectionGene> globalConnections) {
+//		genomes.remove(this);
 
 		ConnectionGene conSearch = (ConnectionGene) connections.values().toArray()[r.nextInt(connections.size())];
 		while (!conSearch.isExpressed() || conSearch.getInNode() == conSearch.getOutNode()) {
@@ -279,10 +276,10 @@ public class Genome implements Serializable {
 		ConnectionGene newToOut = null;
 
 		// SCAN GENOMES//
-		for (Genome a : genomes) { // Both connections must be in same topology
-			ins = a.getConnectionGenes().values().parallelStream()
+//		for (ConnectionGene a : globalConnections) { // Both connections must be in same topology
+			ins = globalConnections.values().parallelStream()
 					.filter(c -> c.getInNode() == con.getInNode() && c.isExpressed()).collect(Collectors.toList());
-			outs = a.getConnectionGenes().values().parallelStream()
+			outs = globalConnections.values().parallelStream()
 					.filter(c -> c.getOutNode() == con.getOutNode() && c.isExpressed()).collect(Collectors.toList());
 
 			for (ConnectionGene in : ins) {
@@ -297,7 +294,8 @@ public class Genome implements Serializable {
 					inToNew.setWeight(con.getWeight());
 					break; // break from genome scan
 				}
-			}
+//			}
+			
 			if (newToOut != null && inToNew != null) { // Unused code
 				break;
 			}
@@ -316,6 +314,9 @@ public class Genome implements Serializable {
 
 			newToOut = new ConnectionGene(newNode.getId(), outNode.getId(), con.getWeight(), true,
 					connectionInnovation.updateInnovation());
+			
+			globalConnections.put(inToNew.getInnovation(), inToNew);
+			globalConnections.put(newToOut.getInnovation(), newToOut);
 		}
 
 		nodes.put(newNode.getId(), newNode);
@@ -355,7 +356,7 @@ public class Genome implements Serializable {
 	// innies and outties can be expected wrt connection disabling in crossover.
 	// TODO: add bool parameter for equal fitness (random assignment of disjoint and
 	// excess genes) (ablate test this as well)
-	public static Genome crossover(Genome parent1, Genome parent2, Random r) {
+	public static Genome crossover(Genome parent1, Genome parent2, Random r, float ADD_CONNECTION_RATE) {
 		Genome child = new Genome();
 
 		for (NodeGene parent1Node : parent1.getNodeGenes().values()) {
@@ -369,7 +370,7 @@ public class Genome implements Serializable {
 						: new ConnectionGene(parent2.getConnectionGenes().get(parent1Connection.getInnovation()));
 
 				if (!childConGene.isExpressed()) {
-					if (r.nextBoolean()) {
+					if (r.nextFloat() < ADD_CONNECTION_RATE) {
 						childConGene.enable(); // add a random chance to enable as per stanely pg.109.
 					} // TODO: add probability variable as a hyperparameter.
 				} // "there is a preset chance that an inherited gene is disabled if it is
@@ -382,7 +383,7 @@ public class Genome implements Serializable {
 				// therefore excess or disjoint.
 
 				if (!childConGene.isExpressed()) {
-					if (r.nextBoolean()) {
+					if (r.nextFloat() < ADD_CONNECTION_RATE) {
 						childConGene.enable();
 					} // Same as above TODO but no need for disable chance as is disjoint/excess with
 						// no comparison
@@ -394,7 +395,8 @@ public class Genome implements Serializable {
 		if (child.setDepth()) {
 			return child;
 		} else {
-			return new Genome(parent1);
+//			return new Genome(parent1);
+			return null;
 		}
 	}
 
