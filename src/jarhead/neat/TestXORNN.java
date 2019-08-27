@@ -76,7 +76,7 @@ public class TestXORNN {
 		}
 
 		List<Float> newList = new LinkedList<Float>();
-		Evaluator eva = new Evaluator(200, parent2, connectionInnovation, nodeInnovation) {
+		Evaluator eva = new Evaluator(5, parent2, connectionInnovation, nodeInnovation) {
 			@Override
 			public float evaluateGenome(Genome g) {
 				float totalDistance = 0f;
@@ -98,8 +98,6 @@ public class TestXORNN {
 //					 }
 //					 System.out.println("With output: " + values.get(0));
 //					 System.out.println("Error: "+ Math.sqrt(Math.pow(distance, 2)));
-					if(distance < 0.5f)
-						distance = 0;
 
 					totalDistance += distance;
 					values.clear();
@@ -113,7 +111,7 @@ public class TestXORNN {
 			}
 		};
 
-		for (int i = 0; i < 100; i++) {
+		for (int i = 0; ; i++) {
 			eva.evaluate();
 
 			System.out.println("Generation: " + i);
@@ -123,7 +121,7 @@ public class TestXORNN {
 			if(eva.getHighestScore() >= 100.0f) {
 				System.out.println("BEST RUN: ");
 				System.out.println(eva.getFittestGenome());
-				System.out.println(eva.getFittestPOM());
+				//System.out.println(eva.getFittestPOM());
 
 				for(int x = 0; x < 2; x++){
 				Network net = new Network(eva.getFittestGenome());
@@ -138,8 +136,6 @@ public class TestXORNN {
 
 					float distance = (float) Math.sqrt(Math.pow(correctResult[l] - values.get(0), 2));
 					System.out.println("Value: " + values.get(0) + " Result: " + correctResult[l] + " error: " + distance);
-					if(distance < 0.5f)
-						distance = 0f;
 
 					totalDistance += distance;
 					System.out.println("Value thus far: " + totalDistance);
@@ -152,7 +148,7 @@ public class TestXORNN {
 			}
 			System.out.print("\n");
 		}
-		System.out.println("BEST RUN: " + eva.getHighestScore());
+/*		System.out.println("BEST RUN: " + eva.getHighestScore());
 		System.out.println(eva.getFittestGenome());
 		System.out.println(eva.getFittestPOM());
 		Network bnet = new Network(eva.getFittestGenome());
@@ -168,6 +164,6 @@ public class TestXORNN {
 
 			newList.clear();
 			values.clear();
-		}
+		}*/
 	}
 }

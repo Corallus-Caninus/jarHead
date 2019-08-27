@@ -29,7 +29,7 @@ public class Chromosome {
 		int excessGenes = countExcessGenes(genome1, genome2);
 		int disjointGenes = countDisjointGenes(genome1, genome2);
 		float avgWeightDiff = averageWeightDiff(genome1, genome2);
-		return excessGenes * c1 + disjointGenes * c2 + avgWeightDiff * c3;
+		return excessGenes * c1 + disjointGenes * c2 + avgWeightDiff * c3; //NOTE: not normalized to total genes
 	}
 
 	/**

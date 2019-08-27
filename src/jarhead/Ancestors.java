@@ -4,221 +4,337 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.*;
 
-//TODO: make serializable to save Ancestry tree as abstract fitness landscape map.
+//TODO: bad encapsulation including Evaluator
+//
+//TODO: store datastructure representation in a file format for
+//	reading into d3 and other languages. implement write and read methods
+//
+//
+//TODO: change large streaming methods to Apache Spark. Extract evaluator methods
+//	out to here as this should be only class calling 
+//	Apache Spark methods (cannot call spark methods from workers)
+//		in the iterim, cheap way to perform distribution is from Evaluation
+//		loop at swap. swap in until workers saturated then continue, broadcast if
+//		any update methods besides default case trigger.
+//
+//TODO: branch from Ancestral_Speciation to Ancestral_Genomic in git repo
+//
+//GOAL: Get working then simplify. simple operations are getting complex in detail (DID)
+//
+//Generalization: across domain and range (environment and objective function):
+//	keep innovation genes consistent (initial topology of new domain's input/output nodes get newest innovationGene count)
+//		
+//		need to differentiate between native topology and imported topology
+//		can have many imported PoMs tested. Rivers of PoMs from various domains/ranges
+//		creates a many to one test case:
+//			imported topology needs to be tested to see which if any PoMs should
+//			be imported. (initial cross-range/domain POM evaluation biased to or 
+//			selecting exclusively from PoMs with high diversity indicators)
+//				diversity indicators are merge count across domain and objective functions and branch count
+
 public class Ancestors {
-	public ConcurrentMap<PointOfMutation, Integer> POMs;// concurrent for speciation
-	// POMs should be a class (lineage?) more data structures than just lineage and
-	// would reduce streaming
-	public HashMap<Integer, ConnectionGene> novelInnovationMap;
+	public List<PointOfMutation> POMs; //list of nodes in the river-tree graph for faster localized changes
+	public Map<Integer, ConnectionGene> innovationMap = new HashMap<Integer, ConnectionGene>();
 
 	// constructor (called in Evaluator constructor)
-	public Ancestors(List<Genome> initialGenepool) { // initial genome==Species.mascot;
-		novelInnovationMap = new HashMap<Integer, ConnectionGene>();
-		POMs = new ConcurrentHashMap<PointOfMutation, Integer>();// Integer is for AncestryTree lineage
+	public Ancestors(List<Genome> initialGenepool, int stagnation) { // initial genome
 
-		novelInnovationMap.putAll(initialGenepool.get(0).getConnectionGenes());
-		PointOfMutation initialPOM = new PointOfMutation(0f, initialGenepool.get(0),
-				initialGenepool.get(0).getConnectionGenes().keySet().stream().collect(Collectors.toList()));
+		innovationMap = new HashMap<Integer, ConnectionGene>();
 
-		POMs.put(initialPOM, 1);// initial PoM TODO: initial score hyperparameter
+		POMs = new ArrayList<PointOfMutation>(); //list of PointOfMutation nodes
+
+		innovationMap.putAll(initialGenepool.get(0).getConnectionGenes());
+
+		/*PointOfMutation initialPOM = new PointOfMutation(0f, initialGenepool.get(0),
+					        		     initialGenepool.get(0).getConnectionGenes()
+								     .keySet().stream().collect(Collectors.toList()));*/
+		PointOfMutation initialPOM = new PointOfMutation(0f, initialGenepool.get(0), initialGenepool); 
+		//selfMerge should set appropriate mascot so default with random
+
+		//initialPOM.parents.add(initialPOM); 
+		//initialPOM.addParent(initialPOM); //dont need special case, flowForward should cover all solutions
+
+		//TODO: broken, initPoM isnt preserved after first self merge
+		//allow parents to be null?
+		//looped at the initPOM TODO: (hack solution) 
+		// and ensure no upstream methdos exist that dont check for this case
+		// it is appropriate to not use addParent method due to special case
+
+		POMs.add(initialPOM);
 
 		for (int i = 0; i < initialGenepool.size(); i++) {
-			initialPOM.members.add(initialGenepool.get(i));
+			initialPOM.snapshot.add(initialGenepool.get(i));
 		}
-		initialPOM.resources = initialGenepool.size() * 100;
-		initialPOM.lifetime = initialPOM.resources;
+		initialPOM.lifetime = stagnation;
+		printGraph();
 	}
-
-	public void migrate(List<Genome> genepool) {
-		// migration and placement of genomes.
-		for (Genome assignGenome : genepool) {
-			PointOfMutation match = POMs.entrySet().stream().sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
-					.filter(e -> assignGenome.getConnectionGenes().keySet().stream()
-											 .anyMatch(c -> e.getKey().innovationGenes.keySet().contains(c)))
-					.findFirst().get().getKey();
-
-			if (match.members.isEmpty() /* || match.lifetime == 0 */) { // swapped out therefore migrating away from
-																		// current POM
-				System.out.println("\n\nmigrating" + /* transferPOM + */" to " + match + "..\n");
-				match.resources++; // only assign resources if topologies tend to migrate this way
-			}
-		}
-
-		// remove last generations genomes from POM members
-		for (PointOfMutation prevPOM : POMs.keySet()) {
-			prevPOM.members.removeAll(POMs.keySet().parallelStream().flatMap(p -> p.members.stream())
-					.filter(g -> !genepool.contains(g)).collect(Collectors.toList()));
-		}
-
-		// clear members (extinct/swapout)
-		for (PointOfMutation extinction : POMs.keySet()) {
-			if (extinction.lifetime == 0) {
-				genepool.removeAll(extinction.members);
-				extinction.members.clear();
-			} else if (extinction.members.isEmpty()) { // prepare for swapin
-				extinction.lifetime = 0;
-			}
-		}
-
-		System.out.println("MIGRATION PRINTOUT: ");
-		for (PointOfMutation printing : POMs.keySet().parallelStream()
-				.sorted((p1, p2) -> p1.highScore.compareTo(p2.highScore)).collect(Collectors.toList())) {
-			System.out.println("\t " + printing + " With population " + printing.members.size() + " with lineage "
-					+ POMs.get(printing) + " with score " + printing.highScore + " and resources " + printing.resources
-					+ " and lifetime " + printing.lifetime + " and mascot: " + printing.mascot + " with genes: "
-					+ printing.mascot.getConnectionGenes().size() + " and novelGenes: "
-					+ printing.innovationGenes.size() + " and Topology: " + printing.mascot.getNodeGenes().size());
-		}
-		System.out.println("MIGRATION COMPLETE...");
-	}
-
-	public void speciate(Map<Genome, Float> scoreMap) {
-		boolean branched = false;
-
-//		System.out.println(POMs.keySet().parallelStream().flatMap(p->p.members.stream()).filter(g->!scoreMap.keySet().contains(g))
-//									  .collect(Collectors.toList()).size());
-
-		for (PointOfMutation checkPOM : POMs.keySet()) {
-			Optional<Genome> match = checkPOM.members.parallelStream().filter(g -> scoreMap.get(g) > checkPOM.highScore)
-					.filter(g -> checkPOM.innovationGenes.keySet().equals(g.getConnectionGenes().keySet()))
-					.max((g1, g2) -> scoreMap.get(g1).compareTo(scoreMap.get(g2)));
-			if (match.isPresent()) {
-				// TODO: optimize in migration for fuzzy speciation
-				System.out.println("OPTIMIZATION..");
-				PointOfMutation replacement = new PointOfMutation(scoreMap.get(match.get()), match.get(),
-						checkPOM.innovationGenes.keySet().stream().collect(Collectors.toList()));
-				replacement.resources = checkPOM.resources; // TODO: copy POM constructor
-				replacement.lifetime = checkPOM.lifetime;
-				replacement.members.addAll(checkPOM.members);
-				POMs.put(replacement, POMs.get(checkPOM));
-
-				POMs.remove(checkPOM); // remove old unoptimized POM. should this keep resources
-
-				// defragment lineage count
-				// TODO: last POM doesnt get reduced
-				PointOfMutation buffer = POMs.keySet().parallelStream().findFirst().get();
-				for (PointOfMutation rearrange : POMs.keySet().parallelStream().skip(1).collect(Collectors.toSet())) {
-					if (POMs.get(buffer) < POMs.get(rearrange) - 1) {
-						POMs.remove(rearrange);
-						POMs.put(rearrange, POMs.get(buffer) + 1);
-					}
-					buffer = rearrange;
-				}
-				branched = true;
-			}
-		}
-
-		for (PointOfMutation checkPOM : POMs.keySet()) {
-
-			Optional<Genome> match = checkPOM.members.parallelStream().filter(g -> scoreMap.get(g) > checkPOM.highScore)
-			// filter out genomes that dont have novel innovations. careful as migrate MUST
-			// happen first
-//						   .filter(g->!checkPOM.innovationGenes.keySet().containsAll(g.getConnectionGenes().keySet())) //redundant with next filter
-					.filter(g -> g.getConnectionGenes().keySet().stream()
-							.anyMatch(c -> novelInnovationMap.keySet().contains(c)))
-					// ensure POM doesnt already exist
-//						   .filter(g-> !POMs.keySet().parallelStream().map(p->p.innovationGenes.keySet()).anyMatch(i->i.containsAll(g.getConnectionGenes().keySet())))
-					.max((g1, g2) -> scoreMap.get(g1).compareTo(scoreMap.get(g2)));
-			if (match.isPresent()) {
-				System.out.println("HIGHSCORE..");
-				Genome newMascot = match.get();
-
-				List<Integer> novelInnovationGenes = match.get().getConnectionGenes().keySet().parallelStream()
-						.filter(c -> !POMs.keySet().parallelStream().flatMap(p -> p.innovationGenes.keySet().stream())
-								.anyMatch(i -> i.equals(c)))
-						.collect(Collectors.toList());
-
-				PointOfMutation addition = new PointOfMutation(scoreMap.get(newMascot), newMascot,
-						novelInnovationGenes);
-
-				POMs.put(addition, POMs.get(checkPOM) + 1);
-				consumeInnovations();
-				// remove all innovations found in matching genome (HashMap method)
-				if (checkPOM.resources > checkPOM.lifetime && POMs.get(checkPOM) != 1) { // why is this condition
-																							// necessary? trace resource
-																							// manipulation migration
-																							// may be flawed
-					checkPOM.resources = checkPOM.resources - checkPOM.lifetime; // keep search limited to minima
-																					// innovation gap.
-					checkPOM.lifetime = checkPOM.resources; // controversal but works
-				}
-
-				branched = true;
-			}
-		}
-
-		// survival of the fittest (remove niches that overconsume and undercompete)
-		for (PointOfMutation fittestSurvivor : POMs.keySet()) {
-			// BUG: was removing both values
-			POMs.entrySet().parallelStream()
-					.filter(p -> fittestSurvivor.highScore >= p.getKey().highScore && fittestSurvivor.mascot
-							.getConnectionGenes().size() < p.getKey().mascot.getConnectionGenes().size()
-							&& !fittestSurvivor.equals(p.getKey()))
-					.forEachOrdered(p -> POMs.remove(p.getKey()));
-		}
-
-		// consider new POMs for migration
-		if (branched) {
-			migrate(scoreMap.keySet().parallelStream().filter(g -> POMs.keySet().stream() // only pass current
-																							// generation. mine as well
-																							// pass POM members.
-					.flatMap(p -> p.members.stream()).collect(Collectors.toList()).contains(g))
-					.collect(Collectors.toList()));
-		}
-	}
-
+	
 	/**
-	 * used to declare a niche
+	 *fundamental mapping operation; traces/maps meaningful topologies
+	 *acquired through neuroevolution runs for pattern analysis and 
+	 *search heuristic
 	 */
-	public void consumeInnovations() {
-		List<Integer> potentialNiches = POMs.keySet().parallelStream().flatMap(p -> p.members.parallelStream())
-				.flatMap(g -> g.getConnectionGenes().keySet().parallelStream())
-				.filter(c -> novelInnovationMap.containsKey(c)).collect(Collectors.toList());
-		novelInnovationMap.keySet().removeAll(potentialNiches);
+	//TODO: raviolli
+	public PointOfMutation update(Map<Integer, ConnectionGene> innovations, Map<Genome, Float> scoremap, PointOfMutation curPoM, float distance, float C1, float C2, float C3, int resources){
+		printGraph();
+		innovationMap = innovations;
 
+		Map.Entry<Genome, Float> newMascot = scoremap.entrySet().stream().max((x1,x2)-> x1.getValue().compareTo(x2.getValue())).get();
+		
+		//DYNAMIC CONSIDERATIONS
+		//TODO: this could be called in swap.
+		if(scoremap.keySet().equals(curPoM.snapshot)){ //distance doesnt need to be calculated
+			System.out.println("(RoM-update) Evaluation broke determinism..");
+			if(newMascot.getValue() != curPoM.highScore){
+				curPoM.highScore = newMascot.getValue();
+
+				updatePotential(curPoM, resources); //alternative to insertPotential could cause greater or lower fitness
+
+				//TODO: why swap here?
+				return(swap(curPoM.snapshot.size(), curPoM, resources)); //cycle until a reliable solution is found
+				//TODO: this should be dynamically programmed within reattachment and fragmentation
+				//	this is currently overly destructive and will heavily slow down optimization
+			}
+		}
+		
+		//SEARCH FOR POTENTIAL NODE MERGERS (collaboratively destructive)
+		//lots of ways to implement this..
+		if(curPoM.highScore < newMascot.getValue()){ 
+			//TODO: should be able to redefine other PoMs without considering curPoM given genomic distance
+			//	this isnt sample efficient
+			List<PointOfMutation> merger = POMs.stream().filter(x-> Chromosome.compatibilityDistance(newMascot.getKey(), x.mascot, C1, C2, C3) < distance)
+								    .filter(x-> newMascot.getValue() > x.highScore)
+								    .collect(Collectors.toList());
+			if(!merger.isEmpty()){	
+				System.out.println("(RoM-update) Merging with " + merger.size() + " POMs");
+
+				//PREPARING GENEPOOL SNAPSHOT
+				List<Genome> snapshotBuffer = new ArrayList<Genome>();
+				snapshotBuffer.addAll(merger.stream().sorted((x1,x2)-> x1.highScore.compareTo(x2.highScore)) //sort by HighScore for clipping
+								     .flatMap(x-> x.snapshot.stream())//transform to flatmap (verify operation is sequential, lazy should keep sort
+								     .collect(Collectors.toList()));//amoeba
+
+				if(snapshotBuffer.size() < curPoM.snapshot.size()){ 
+					snapshotBuffer.addAll(curPoM.snapshot); //append to end of list
+					//if needing to pad POM pad with current genepool as it has pertinence via genesis
+					//
+					//TODO: how can a self merge fill its genepool? same as this.
+					//
+					//TODO: change to performing emergency crossover of mascots and partial genepool until maxPop
+					//	instead of this case? I actually kinda like it..
+				}
+
+				snapshotBuffer = snapshotBuffer.subList(0, curPoM.snapshot.size()); 
+
+				//PREPARING POM OBJECT
+				PointOfMutation speciated = speciate(newMascot, snapshotBuffer, curPoM);
+
+				//include curPoM as a new parent in merger unless it is included in the blob
+				if(!merger.contains(curPoM) && !merger.stream().flatMap(x-> x.parents.stream()).anyMatch(x->x.equals(curPoM))
+					&& !merger.stream().flatMap(x-> x.children.stream()).anyMatch(x->x.equals(curPoM))){  
+					//TODO: need to add currentPoM parents to merged solution
+					//	this is an extension to constructive speciation
+					//	self-merge?
+					speciated.addParent(curPoM); 
+				}
+
+				//CLEANUP DEFUNCT CHILD NODES
+				insertPotential(speciated, merger);
+				
+				//RETURN SPECIATED POM TO CONTINUE EVOLUTION/EVALUATION
+				return(speciated); 
+			}
+
+			//SPECIATE A NOVEL POM NODE (constructive)
+			else if(merger.isEmpty() && newMascot.getValue() > curPoM.highScore){
+				System.out.println("(RoM-update) Novel POM acquired..");
+
+				PointOfMutation speciated = speciate(newMascot, curPoM.snapshot, curPoM);
+				speciated.addParent(curPoM);
+
+				printGraph();
+				return(speciated);
+			}
+
+		}
+		//else{
+		//DEFAULT CASE (fallthrough)
+			//NO SPECIATION HAS OCCURED: CONTINUE
+			System.out.println("Passthrough..");
+			return(curPoM);
+		//}
+	}
+
+	//NOTE: both Potential methods should initialize the node locally for flowForward nothing more.
+	//	TODO: should Potential methods be extracted to PointOfMutation since localized tree operations
+	/**
+	 *insert newly created POM merge into graph and cleanup any headless nodes/branches
+	 *caused by correcting fitness gradient downstream
+	 *
+	 * river analogy: creates a change in potential at a specific point by crossing 
+	 * the streams, possibly causing a reflow over existing channels (edges)
+	 */
+	//TODO: do merge of POMs indicate diversity wrt walking POMs? likely not..
+	//	this still has some information about the distance covered in evaluating this
+	//	PointOfMutation, but shows latent hillClimbing. investigate further
+	
+	private void insertPotential(PointOfMutation speciated, List<PointOfMutation> merger){
+
+		List<PointOfMutation> filteredChildren = merger.stream()
+							       .flatMap(x-> x.children.stream())
+							       .filter(x-> !merger.contains(x))
+							       .collect(Collectors.toList());
+
+		//TODO: need to verify the proper child and parents are added
+		List<PointOfMutation> filteredParents = merger.stream()
+							      .flatMap(x-> x.parents.stream())
+							      //prevent cyclic river-gradient, also would break during flowForward
+							      .filter(x-> !filteredChildren.contains(x)) 
+							      //these nodes will be destroyed therefor null ref
+							      .filter(x-> !merger.contains(x))
+							      .collect(Collectors.toList());
+		speciated.addParents(filteredParents);
+		speciated.addChildren(filteredChildren);
+
+		//completely remove all now merged POMs
+		merger.forEach(x-> x.removeNode(POMs)); 
+
+		speciated.flowForward(POMs);//ready to flowForward, brokenChildren will be filtered in this walk
 	}
 
 	/**
+	 *reset tree locally if score has changed and resort fitness gradient
+	 *called on swapIn evaluation of existing POM genepool representation
+	 */
+	private void updatePotential(PointOfMutation rescore, int resources){
+		if(!rescore.parents.contains(rescore)){  //special case for initPoM
+			//gradient case 2
+			for(PointOfMutation parent : rescore.parents){
+				parent.flowForward(POMs); 
+			}
+
+			//gradient case 3 and 1
+			rescore.flowForward(POMs);
+		}
+	}
+	
+	/**
+	 *called within all merge methods with different implementations for
+	 *multi-merge, self-merge and generic speciation
+	 *
+	 * sets highScore, snapshot, mascot (center of distance area/circle) and parent
+	 */
+	public PointOfMutation speciate(Map.Entry<Genome, Float> newMascot, List<Genome> snapshot, PointOfMutation parent) {
+		PointOfMutation speciated = new PointOfMutation(newMascot.getValue(), newMascot.getKey(), snapshot);
+		
+		//speciated.addParent(parent); 
+		POMs.add(speciated);
+
+		return speciated;
+	}
+
+	/**
+	 *swap out the current PoM for one in the list if the lifetime is 0 
+	 */
+	public PointOfMutation swap(Integer populationSize, PointOfMutation curPoM, int resources) {
+		Random random = new Random();
+		if(curPoM.lifetime <= 0){ //allows for swap to be implemented where lifetime % genepool.size() != 0 
+			PointOfMutation swapin = POMs.get(random.nextInt(POMs.size()));
+			swapin.lifetime = resources;
+			System.out.println("(swap) SWAPING OUT " + curPoM + "for: " + swapin);
+			return swapin;
+		}
+		//dont swap out
+		else
+			return curPoM;
+	}		
+	
+	public void printGraph(){
+		//get first node
+		List<PointOfMutation> head = POMs.stream().filter(x-> x.parents.isEmpty()).collect(Collectors.toList());//top o the river to ya
+		
+		System.out.println("(RoM) Printout: ");
+		for(PointOfMutation node : POMs){
+			System.out.println("Node: " + node + "-" + node.highScore +" has children: ");
+			for(PointOfMutation child : node.children){
+				System.out.println(child + "-" + child.highScore);
+			}
+		}
+/*
+		System.out.println("Printout with " + head.size() + " fragmentations");
+		if(!head.isEmpty()){
+			System.out.println("Top o the river.."); 
+			List<PointOfMutation> current = new ArrayList<PointOfMutation>();
+			List<PointOfMutation> buffer = new ArrayList<PointOfMutation>();
+
+			current.add(head.get(0));
+			//drill down the river
+			while(current.stream().flatMap(x-> x.children.stream()).count() > 0){
+				for(PointOfMutation node : current){
+					
+					//TODO: too many special cases for initPoM. this needs to be fixed
+					if(node.parents.contains(node)){
+						System.out.println("self-referencing initPoM");
+						continue;
+					}
+
+					System.out.println("PointOfMutation: " + node + " contains..");
+					for(PointOfMutation child : node.children){
+						System.out.println("--" + child);
+					}
+					buffer.addAll(node.children); 
+				}
+				current = buffer;
+			}
+		}
+		//exit
+		
+		*/
+	}
+
+	//Only pertinent for storing Ancestry structure
+	/**
+	 * @Deprecated
+	 * used to declare a niche
+	 * in new method: used to keep innovation genes consistent
+	 * across POMs.
+	 */
+	//TODO: ensure innovationGenes are collected here and not in evaluator/genome 
+	//	(SEE BELOW)
+	/*public void consumeInnovations() {
+		List<Integer> potentialNiches = POMs.keySet().parallelStream().flatMap(p -> p.snapshot.parallelStream())
+				.flatMap(g -> g.getConnectionGenes().keySet().parallelStream())
+				.filter(c -> innovationMap.containsKey(c)).collect(Collectors.toList());
+		innovationMap.keySet().removeAll(potentialNiches);
+
+	}*/
+
+	/**
+	 * @Deprecated
 	 * novel innovation produced by genepool.
 	 */
 	// TODO: use this for global SCAN_GENOMES check
-	public void updateInnovations(List<Genome> nextGenGenomes) {
+	/*public void updateInnovations(List<Genome> nextGenGenomes) {
 		// add all new ConnectionsGenes
-		System.out.println("innovationList count: " + novelInnovationMap.entrySet().parallelStream().count());
+		System.out.println("innovationList count: " + innovationMap.entrySet().parallelStream().count());
 
 		List<ConnectionGene> novelInnovations = nextGenGenomes.parallelStream()
 				.flatMap(g -> g.getConnectionGenes().values().parallelStream())
-				// not already in novelInnovationMap
-				.filter(c -> !novelInnovationMap.keySet().contains(c.getInnovation()))
-				// innovation is not already consumed in a niche
-				.filter(c -> !POMs.keySet().parallelStream().flatMap(p -> p.innovationGenes.keySet().stream())
-						.collect(Collectors.toList()).contains(c.getInnovation()))// autobox rollout
+				// not already in innovationMap
+				.filter(c -> !innovationMap.keySet().contains(c.getInnovation()))
 				.collect(Collectors.toList());
-		for (ConnectionGene gene : novelInnovations) {
-			if (!novelInnovationMap.containsKey(gene.getInnovation()))
-				novelInnovationMap.put(gene.getInnovation(), gene);
+
+		for(ConnectionGene entry : novelInnovations){
+			innovationMap.put(entry.getInnovation(), innovation);
 		}
-	}
+	}*/
 
-	public PointOfMutation swap(Random random, Integer populationSize) {
-		List<PointOfMutation> tables = POMs.keySet().parallelStream().filter(p -> p.lifetime == 0)
-				.filter(p -> p.resources >= populationSize) // limit thrashing and partial generations
-				.collect(Collectors.toList());
-		if (!tables.isEmpty()) {
-			PointOfMutation swap = tables.get(random.nextInt(tables.size()));
-
-			PointOfMutation first = POMs.entrySet().stream().filter(e -> e.getValue() == 1).findFirst().get().getKey();
-			if (POMs.size() == 1) {
-				first.resources += populationSize;
-			}
-
-			if (swap.lifetime == 0) { // redundant
-				swap.lifetime = swap.resources;
-			}
-//			System.out.println("swap: Selected POM: " + swap);
-			return swap;
-		} else {
-			return null;
-		}
-	}
+	//return a randomly selected PoM from list (implement randomWalk when biasing selection to lineage)
+	//	return a fully swapped in PoM with snapshot if swapped
+	/**
+	 *potentially return a swapped in PoM, fundamental operation for implementing mapped graph(load from graph for runtime)
+	 */
+	//TODO: possibly add special case to randomize initPOM topology as per k.stanley
+	//TODO: this is broken in implementation.. shouldnt be since this is the only place lifetime is increased
+	//	SWAP IS NEVER CALLED!!!!!
 }
