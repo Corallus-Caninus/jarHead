@@ -35,7 +35,7 @@ public abstract class Evaluator {
 	private float C1 = 1.0f; 
 	private float C2 = 1.0f;
 	private float C3 = 0.4f;
-	private float DIST = 1; // Discretization hyperparameter for progressive novelty mapping
+	private float DIST = 2; // Discretization hyperparameter for progressive novelty mapping
 	private final int STAGNATION = 10000; //momentum given pressurized genepool, volume of water to be flowed
 
 	//Genome specific constants:
@@ -250,12 +250,14 @@ public abstract class Evaluator {
 	 * @param random     random seed.
 	 * @return selected genome.
 	 */
+	//TODO: consider other evaluation methods for sample efficiency (like Chandler was talking about)
+	//	rename this to fitnesse proportionate selection
+	
 	private Genome getRandomGenomeBiasedFitness(){
-		double completeWeight = 0.0; // sum of probabilities of selecting each genome - selection is more probable
-										// for genomes with higher fitness
-		//List<Genome> nonChildren = selectFrom.members.parallelStream().filter(g -> scoreMap.containsKey(g))
-				//.collect(Collectors.toList());
-				
+		// sum of probabilities of selecting each genome - selection is more probable
+		// for genomes with higher fitness
+		double completeWeight = 0.0; 
+
 		for (Genome g : genepool) {
 			completeWeight += scoreMap.get(g);
 		}

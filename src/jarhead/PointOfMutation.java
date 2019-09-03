@@ -42,16 +42,11 @@ public class PointOfMutation{
 	public void removeNode(List<PointOfMutation> POMs){
 		POMs.remove(this);//remove from nodeList
 	
-		//remove references to this node in tree
-		for(PointOfMutation parent : this.parents){
-			parent.children.remove(this);
-		}
-		for(PointOfMutation child : this.children){
-			child.parents.remove(this);
-		}
+		this.removeEdges(this.parents);
+		this.removeEdges(this.children);
 		//remove references from this node in tree
-		this.parents.clear();
-		this.children.clear();
+		//this.parents.clear();
+		//this.children.clear();
 		this.lifetime=0; //its dead jim..
 	}
 
@@ -72,7 +67,7 @@ public class PointOfMutation{
 		}
 	}
 	public void removeEdges(List<PointOfMutation> edges){
-		//TODO: this may still be concurently modifying..
+		//TODO: this only works when there is no circularity
 		//sort list of edges to be removed
 		List<PointOfMutation> parentEdges = edges.stream().filter(x-> this.parents.contains(x)).collect(Collectors.toList());
 		List<PointOfMutation> childEdges = edges.stream().filter(x-> this.children.contains(x)).collect(Collectors.toList());
@@ -94,13 +89,13 @@ public class PointOfMutation{
 	/**
 	 *add a parent node edge to and from this POM
 	 */
-	public void addParent(PointOfMutation edge){
-		this.parents.add(edge);
-		edge.children.add(this);
+	public void addParent(PointOfMutation parent){
+		this.parents.add(parent);
+		parent.children.add(this);
 	}
-	public void addParents(List<PointOfMutation> edges){
-		this.parents.addAll(edges.stream().collect(Collectors.toSet()));
-		for(PointOfMutation edge : edges.stream().collect(Collectors.toSet())){
+	public void addParents(List<PointOfMutation> parentList){
+		this.parents.addAll(parentList.stream().collect(Collectors.toSet()));
+		for(PointOfMutation edge : parentList.stream().collect(Collectors.toSet())){
 			edge.children.add(this);
 		}
 	}
@@ -108,13 +103,13 @@ public class PointOfMutation{
 	/**
 	 *add a child node edge to and from this POM
 	 */
-	public void addChild(PointOfMutation edge){
-		this.children.add(edge);
-		edge.children.add(this);
+	public void addChild(PointOfMutation child){
+		this.children.add(child);
+		child.children.add(this);
 	}
-	public void addChildren(List<PointOfMutation> edges){
-		this.children.addAll(edges.stream().collect(Collectors.toSet()));
-		for(PointOfMutation edge : edges.stream().collect(Collectors.toSet())){
+	public void addChildren(List<PointOfMutation> childList){
+		this.children.addAll(childList.stream().collect(Collectors.toSet()));
+		for(PointOfMutation edge : childList.stream().collect(Collectors.toSet())){
 			edge.children.add(this);
 		}
 	}
@@ -130,40 +125,34 @@ public class PointOfMutation{
 	 *forward propagation using localized tree walk
 	 */
 	public void flowForward(List<PointOfMutation> POMs){
-		System.out.println("Flowing river..");
-		List<PointOfMutation> verify = new ArrayList<PointOfMutation>();
-		List<PointOfMutation> buffer = new ArrayList<PointOfMutation>();
-		
-		//initialize from this node
-		for(PointOfMutation node : this.children){
-			//start with localized gradient
-			if(node.highScore < this.highScore){
-				verify.add(node);
-				//verify is first layer of children
-				node.removeEdge(this);
-				//TODO: concurrent with this.children 
-				//	and node.parents list modification
-			}
-		}
-		
-		//currently deletes all headless branches completely. might want to fragment
-		//or reattach headless branches but changes diversity measurements
-		
-		if(!verify.isEmpty()){
-			//loop
-			while(verify.stream().anyMatch(x-> x.children.size() > 0)){ //until are frontier nodes in buffer..
-				//user iteration for readability..
-				for(PointOfMutation node : verify){ 
-					List<PointOfMutation> childNodes = node.children;
-					node.removeEdges(node.children);//thats pretty weird..
-					buffer.addAll(childNodes.stream().filter(x-> x.parents.isEmpty()).collect(Collectors.toSet())); 
+		System.out.println("flowing..");
+		List<PointOfMutation> brokenNodes = new ArrayList<PointOfMutation>();
+		List<PointOfMutation> cascadingNodes = new ArrayList<PointOfMutation>();
+
+		//setup:
+		//verify gradient starting from this node..
+		brokenNodes.addAll(this.children.stream().filter(x-> this.highScore > x.highScore)
+				      		         .collect(Collectors.toList()));
+		this.removeEdges(brokenNodes);
+
+		//loop:
+		//remove edges from brokenNodes to this node..
+		//while(brokenNodes.stream().anyMatch(x-> x.children.size() > 0)){ //until are frontier nodes in buffer..
+		while(!brokenNodes.isEmpty()){
+			for(PointOfMutation removal : brokenNodes){
+				//if no parents are present
+				if(removal.parents.isEmpty()){ //TODO: destroys initPOM
+					//store children
+					cascadingNodes.addAll(removal.children);
+					//removeNode
+					System.out.println("Removing: " + removal);
+					removal.removeNode(POMs);
 				}
-				//remove nodes that are headless and have been propagated
-				verify.stream().filter(x-> x.parents.isEmpty())
-					       .forEach(x-> x.removeNode(POMs));
-				//forward propagate
-				verify = buffer;
 			}
+			//repeat
+			brokenNodes.clear();
+			brokenNodes.addAll(cascadingNodes);
+			cascadingNodes.clear();
 		}
 	}
 
@@ -193,25 +182,6 @@ public class PointOfMutation{
 		//parents only works when not reattaching
 		//TODO: also need parent/children across domain metric
 	}
-
-	//------------------------storage---------------------------
-	//TODO should these be in Ancestors? 
-	//LoD:
-	//	RoM = Ancestors
-	//	PoM = PointOfMutations
-	/**
-	 *writeout the river to filesystem for
-	 *preserving datastructure and cross language usage
-	 */
-	public void writeRiver(){
-	}
-	/**
-	 * read in a previous river for implementation
-	 * across domain/range or run
-	 */
-	public void readRiver(){
-	}
-	//---------------------------------------------------------
 
         /**
 	 * @Deprecated

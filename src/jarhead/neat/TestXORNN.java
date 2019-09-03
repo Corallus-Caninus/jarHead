@@ -76,7 +76,7 @@ public class TestXORNN {
 		}
 
 		List<Float> newList = new LinkedList<Float>();
-		Evaluator eva = new Evaluator(5, parent2, connectionInnovation, nodeInnovation) {
+		Evaluator eva = new Evaluator(100, parent2, connectionInnovation, nodeInnovation) {
 			@Override
 			public float evaluateGenome(Genome g) {
 				float totalDistance = 0f;

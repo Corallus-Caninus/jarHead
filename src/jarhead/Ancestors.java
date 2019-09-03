@@ -3,6 +3,7 @@ package jarhead;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.*;
+import java.io.*;
 
 //TODO: bad encapsulation including Evaluator
 //
@@ -49,24 +50,104 @@ public class Ancestors {
 					        		     initialGenepool.get(0).getConnectionGenes()
 								     .keySet().stream().collect(Collectors.toList()));*/
 		PointOfMutation initialPOM = new PointOfMutation(0f, initialGenepool.get(0), initialGenepool); 
-		//selfMerge should set appropriate mascot so default with random
 
-		//initialPOM.parents.add(initialPOM); 
-		//initialPOM.addParent(initialPOM); //dont need special case, flowForward should cover all solutions
-
-		//TODO: broken, initPoM isnt preserved after first self merge
-		//allow parents to be null?
-		//looped at the initPOM TODO: (hack solution) 
-		// and ensure no upstream methdos exist that dont check for this case
-		// it is appropriate to not use addParent method due to special case
-
-		POMs.add(initialPOM);
+		POMs.add(initialPOM); //TODO: anchor initPOM so it doesnt walk CRITICAL FOR CONTINUITY
 
 		for (int i = 0; i < initialGenepool.size(); i++) {
 			initialPOM.snapshot.add(initialGenepool.get(i));
 		}
 		initialPOM.lifetime = stagnation;
 		printGraph();
+	}
+	/**
+	 *reads in a RoM file for recovery from file system
+	 *
+	 *resources and lifetime are not kept between runs as these are assigned by the evaluator
+	 *
+	 *file is partitioned into thirds of ascending defining attributes
+	 *
+	 *node data - edge data - attribute data(TODO)
+	 *
+	 *FORMAT:
+	 *	() == token
+	 *
+	 *	node (tab) highscore 
+	 *	(newLine) iterate
+	 *	(double newLine) //end of node data
+	 *
+	 * 	(P)
+	 *	parents
+	 *	(C)
+	 *	children
+	 *	(newLine) iterate
+	 *	(double newLine) //end of edge data
+	 *	//currently this is the end of the file as this is all thats needed for basic visualization
+	 *
+	 *	(S)
+	 *	snapshot
+	 *	(M)
+	 *	mascot
+	 *	(newLine) iterate
+	 *	(double newLine) //EOF
+	 */
+	//NOTE: be careful about using tokens that could appear in object reflection (vitual address thing)
+	public void writeRiver(){
+		try{
+			//initialize the outStream
+			FileWriter writeROM = new FileWriter(this.toString()); //this should work as object is constructed in the 'heap'
+			//writeout the virtual address of the object as a serialization throwback
+		
+			//GRAPH/VISUALIZATION SPECIFIC DATASETS
+			for(PointOfMutation node : POMs){ //TODO: ensure this is sequential.. yes (the world may never know)
+				//writeout all nodes to the front of the file
+				writeROM.write(node.toString()); 
+				writeROM.write('\t');
+				//writeout fitness of respective nodes
+				writeROM.write(node.highScore.toString());
+				writeROM.write('\n');
+			}
+			writeROM.write('\n');//END OF NODE INDICATOR
+			writeROM.write('\n');//END OF NODE INDICATOR
+
+			for(PointOfMutation node : POMs){
+				//writeout all the edge information to the back of the file
+				for(PointOfMutation parent : node.parents){
+					writeROM.write('P');//PARENT INDICATOR
+					writeROM.write(parent.toString());
+				}
+				for(PointOfMutation child : node.children){
+					writeROM.write('C');//CHILD INDICATOR
+					writeROM.write(child.toString());
+				}
+				writeROM.write('\n');
+			}
+			writeROM.write('\n');//END OF EDGE INDICATOR
+			writeROM.write('\n');//END OF EDGE INDICATOR
+
+			//MISC DATASETS
+			/*
+			for(PointOfMutation node : POMs){
+				writeROM.write('S');
+				for(Genome genome : node.snapshot){
+					writeROM.write(genome); //TODO: how are genomes defined? writeout serialization?
+				}
+				writeROM.write('M');
+				writeROM.write(node.mascot);
+				//writeout all attribute data per node (snapshot etc)
+				writeROM.write('\n')
+			}
+			writeROM.write('\n\n');//EOF INDICATOR
+			*/
+			writeROM.close();
+		}catch(IOException e){
+			System.out.println("ERROR: failed to write RoM");
+			e.printStackTrace();
+		}
+	}
+	public void readRiver(){
+		//initialize the readStream
+		//read in node information
+		//associate with edge information
 	}
 	
 	/**
@@ -77,6 +158,7 @@ public class Ancestors {
 	//TODO: raviolli
 	public PointOfMutation update(Map<Integer, ConnectionGene> innovations, Map<Genome, Float> scoremap, PointOfMutation curPoM, float distance, float C1, float C2, float C3, int resources){
 		printGraph();
+		writeRiver();
 		innovationMap = innovations;
 
 		Map.Entry<Genome, Float> newMascot = scoremap.entrySet().stream().max((x1,x2)-> x1.getValue().compareTo(x2.getValue())).get();
@@ -90,8 +172,9 @@ public class Ancestors {
 
 				updatePotential(curPoM, resources); //alternative to insertPotential could cause greater or lower fitness
 
-				//TODO: why swap here?
-				return(swap(curPoM.snapshot.size(), curPoM, resources)); //cycle until a reliable solution is found
+				//shouldnt have to swap here as lifetime is preserved (just altered highScore)
+				return(curPoM);
+
 				//TODO: this should be dynamically programmed within reattachment and fragmentation
 				//	this is currently overly destructive and will heavily slow down optimization
 			}
@@ -130,13 +213,10 @@ public class Ancestors {
 				PointOfMutation speciated = speciate(newMascot, snapshotBuffer, curPoM);
 
 				//include curPoM as a new parent in merger unless it is included in the blob
-				if(!merger.contains(curPoM) && !merger.stream().flatMap(x-> x.parents.stream()).anyMatch(x->x.equals(curPoM))
+				/*if(!merger.contains(curPoM) && !merger.stream().flatMap(x-> x.parents.stream()).anyMatch(x->x.equals(curPoM))
 					&& !merger.stream().flatMap(x-> x.children.stream()).anyMatch(x->x.equals(curPoM))){  
-					//TODO: need to add currentPoM parents to merged solution
-					//	this is an extension to constructive speciation
-					//	self-merge?
-					speciated.addParent(curPoM); 
-				}
+					speciated.addParent(curPoM); //TODO: this is wrong. wouldnt this be covered in speciation case
+				}*/
 
 				//CLEANUP DEFUNCT CHILD NODES
 				insertPotential(speciated, merger);
@@ -171,35 +251,79 @@ public class Ancestors {
 	 *insert newly created POM merge into graph and cleanup any headless nodes/branches
 	 *caused by correcting fitness gradient downstream
 	 *
+	 *also seam any connections that are lost by altering the river graph with 
+	 *merge-consolidation (the blob)
+	 *
 	 * river analogy: creates a change in potential at a specific point by crossing 
 	 * the streams, possibly causing a reflow over existing channels (edges)
 	 */
 	//TODO: do merge of POMs indicate diversity wrt walking POMs? likely not..
 	//	this still has some information about the distance covered in evaluating this
 	//	PointOfMutation, but shows latent hillClimbing. investigate further
-	
-	private void insertPotential(PointOfMutation speciated, List<PointOfMutation> merger){
+	private void insertPotential(PointOfMutation speciated, List<PointOfMutation> blob){
 
-		List<PointOfMutation> filteredChildren = merger.stream()
+		//TODO: first development is walk the graph
+		List<PointOfMutation> currentNodes = new ArrayList<PointOfMutation>();
+		List<PointOfMutation> nextNodes = new ArrayList<PointOfMutation>();
+
+		HashMap<List<PointOfMutation>, List<PointOfMutation>> residues = new HashMap<PointOfMutation, List<PointOfMutation>>();
+		//setup:
+		currentNodes.add(POMs.stream().findAny(x-> x.parents.isEmpty()).get());
+
+		//loop:
+		while(currentNodes.stream().allMatch(x-> x.children.isEmpty())){
+			for(PointOfMutation node : currentNodes){
+				for(PointOfMutation child : node.children){
+					//check for rising edges
+					if(blob.contains(child)){
+						//add all parents that are outside the blob boundary
+						residues.put(child, child.parents.stream().filter(x-> !blob.contains(x)).collect(Collectors.toList()));
+						//replace existing residues with their blob children nodes
+					}
+					//check for falling edges
+				}
+				//if a rising edge is found add current node parents that arent in the blob to map
+				//	entry: non-blob parents value: node discovered
+				//if blob node has children outside the blob a seam is formed
+				//	add edges from discovered entry to this nodes non-blob children
+				//else if blob node has children inside the blob add child node parents
+				//	that are outside the blob to blob nodes entry
+				//
+				//(default case) doesnt need consideration and will be GC'd
+				//if no children are left
+				//	blob is frontier and remove
+				nextNodes.addAll(node.children);
+			}
+			currentNodes.clear();
+			currentNodes.addAll(nextNodes);
+			nextNodes.clear();
+		}
+
+		//End of Blob-Seaming
+		
+		//TODO: not as trivial as this. need to place as a distinct speciated child from furthest
+		//	child candidates and add all parents
+		List<PointOfMutation> boundaryChildren = blob.stream()
 							       .flatMap(x-> x.children.stream())
 							       .filter(x-> !merger.contains(x))
 							       .collect(Collectors.toList());
 
-		//TODO: need to verify the proper child and parents are added
-		List<PointOfMutation> filteredParents = merger.stream()
+		List<PointOfMutation> boundaryParents = blob.stream()
 							      .flatMap(x-> x.parents.stream())
-							      //prevent cyclic river-gradient, also would break during flowForward
-							      .filter(x-> !filteredChildren.contains(x)) 
-							      //these nodes will be destroyed therefor null ref
 							      .filter(x-> !merger.contains(x))
 							      .collect(Collectors.toList());
-		speciated.addParents(filteredParents);
-		speciated.addChildren(filteredChildren);
+		//TODO: easiest merge solution is to walk through the tree, 
+		//shorting across merge candidates to reform the graph
+		//this would be a special case of flowForward
+
+		speciated.addParents(boundaryParents);
+		speciated.addChildren(boundaryChildren);
 
 		//completely remove all now merged POMs
-		merger.forEach(x-> x.removeNode(POMs)); 
+		blob.forEach(x-> x.removeNode(POMs));
 
-		speciated.flowForward(POMs);//ready to flowForward, brokenChildren will be filtered in this walk
+		speciated.flowForward(POMs);
+		//ready to flowForward, brokenChildren will be filtered in this walk
 	}
 
 	/**
@@ -260,36 +384,33 @@ public class Ancestors {
 				System.out.println(child + "-" + child.highScore);
 			}
 		}
-/*
+		//works but contains circularity
 		System.out.println("Printout with " + head.size() + " fragmentations");
 		if(!head.isEmpty()){
-			System.out.println("Top o the river.."); 
-			List<PointOfMutation> current = new ArrayList<PointOfMutation>();
-			List<PointOfMutation> buffer = new ArrayList<PointOfMutation>();
+			//DEBUG: first frag has is a child with no parent node registered..
+			for(PointOfMutation frag : head){
+				System.out.println("Top o the river.."); 
+				List<PointOfMutation> current = new ArrayList<PointOfMutation>();
+				List<PointOfMutation> buffer = new ArrayList<PointOfMutation>();
 
-			current.add(head.get(0));
-			//drill down the river
-			while(current.stream().flatMap(x-> x.children.stream()).count() > 0){
-				for(PointOfMutation node : current){
-					
-					//TODO: too many special cases for initPoM. this needs to be fixed
-					if(node.parents.contains(node)){
-						System.out.println("self-referencing initPoM");
-						continue;
-					}
-
-					System.out.println("PointOfMutation: " + node + " contains..");
-					for(PointOfMutation child : node.children){
-						System.out.println("--" + child);
-					}
-					buffer.addAll(node.children); 
+				//current.add(head.get(0));
+				current.add(frag);
+				//drill down the river
+				while(current.stream().flatMap(x-> x.children.stream()).count() > 0){
+						for(PointOfMutation node : current){
+							System.out.println("PointOfMutation: " + node + "-" + node.highScore + " contains..");
+							for(PointOfMutation child : node.children){
+								System.out.println("--" + child + "-" + child.highScore);
+							}
+						}
+					buffer.addAll(current.stream().flatMap(x-> x.children.stream()).collect(Collectors.toSet()));
+					current.clear();
+					current.addAll(buffer);
+					buffer.clear();
 				}
-				current = buffer;
 			}
 		}
 		//exit
-		
-		*/
 	}
 
 	//Only pertinent for storing Ancestry structure
