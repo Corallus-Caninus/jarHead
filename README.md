@@ -1,4 +1,6 @@
-**Deprecated and Broken**
+![stability-deprecated](https://img.shields.io/badge/stability-deprecated-red.svg)
+
+**Deprecated and Broken (in current revision)**
 
 The jarHead project (including RoM/PoM) has been halted. several working version including a pure NEAT implementation can be found within the revision control but this is not recommended due to disorganization. Changes will not be made for the foreseable future. 
 
